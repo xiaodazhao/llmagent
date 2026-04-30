@@ -2,6 +2,8 @@
 import pandas as pd
 import numpy as np
 
+from utils.chainage_utils import format_chainage_dk, format_chainage_range_dk
+
 
 def build_segments(df: pd.DataFrame, segment_length=10):
     """
@@ -103,10 +105,7 @@ def _format_dk(x):
     把数值里程格式化为 DKxxx+yyy
     例如 1013.363 -> DK1013+363
     """
-    x = float(x)
-    km = int(x)
-    meter = int(round((x - km) * 1000))
-    return f"DK{km}+{meter:03d}"
+    return format_chainage_dk(x)
 
 
 def format_segment_label(df: pd.DataFrame):
@@ -116,7 +115,7 @@ def format_segment_label(df: pd.DataFrame):
     out = df.copy()
 
     out["segment"] = out.apply(
-        lambda r: f"{_format_dk(r['segment_start_first'])}~{_format_dk(r['segment_end_first'])}",
+        lambda r: format_chainage_range_dk(r["segment_start_first"], r["segment_end_first"]),
         axis=1
     )
 
@@ -270,6 +269,9 @@ def build_typical_segments_table(segment_df: pd.DataFrame, top_n=20):
 
     if "刀盘扭矩_mean_rel_change" in out.columns:
         score += out["刀盘扭矩_mean_rel_change"].fillna(0).clip(lower=0) * 6
+
+    if "risk_response_coupling_index" in out.columns:
+        score += out["risk_response_coupling_index"].fillna(0) * 8
 
     out["priority_score"] = score
     out = out.sort_values("priority_score", ascending=False).reset_index(drop=True)

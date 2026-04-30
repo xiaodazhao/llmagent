@@ -8,6 +8,12 @@ from llm.llm_api import call_llm
 from llm.prompt_builder import build_prompt
 from llm.prompt_builder_timewindow import build_prompt_timewindow
 from schemas.api import DailyReportRequest, TimeWindowRequest
+from services.history_memory_service import (
+    build_history_comparison,
+    build_history_record,
+    load_history_records,
+    save_history_record,
+)
 from utils.io_utils import get_all_csv_paths, load_csv_by_date, load_latest_csv
 from utils.serialization import serialize_for_json
 from utils.time_window_utils import load_df_by_time
@@ -38,6 +44,11 @@ def register_tbm_routes(
         try:
             _, df = load_csv_by_date(req.date)
             result = analyze_tbm_data(df)
+            current_record = build_history_record(req.date, result)
+            history_records = load_history_records(limit=10, before_date=req.date)
+            history_comparison = build_history_comparison(current_record, history_records)
+            save_history_record(current_record)
+            result["llm_summary"]["施工历史记忆对比"] = history_comparison
 
             prompt = build_prompt(
                 seg_text=result["seg_text"],
@@ -173,6 +184,13 @@ def register_tbm_routes(
                 "推力_mean",
                 "刀盘扭矩_mean",
                 "efficiency",
+                "geo_risk_norm",
+                "source_evidence_norm",
+                "load_response_norm",
+                "speed_decay_norm",
+                "risk_response_coupling_index",
+                "coupling_label",
+                "coupling_interpretation",
                 "interpretation",
             ]
 
@@ -199,6 +217,8 @@ def register_tbm_routes(
                 "typical_segments": serialize_for_json(
                     typical_df.to_dict(orient="records") if not typical_df.empty else []
                 ),
+                "coupling_summary": serialize_for_json(result.get("coupling_summary", {})),
+                "digital_twin_state": serialize_for_json(result.get("digital_twin_state", {})),
             }
 
         except Exception as e:
@@ -211,6 +231,51 @@ def register_tbm_routes(
                 },
                 "segment_table": [],
                 "typical_segments": [],
+            }
+
+    @router.get("/digital_twin_state")
+    def digital_twin_state_api(date: Optional[str] = None):
+        try:
+            _, df = load_csv_by_date(date) if date else load_latest_csv()
+            result = analyze_tbm_data(df)
+            return {
+                "date": date,
+                "digital_twin_state": serialize_for_json(result.get("digital_twin_state", {})),
+                "coupling_summary": serialize_for_json(result.get("coupling_summary", {})),
+            }
+        except Exception as e:
+            print(f"[Digital Twin State API Error] {e}")
+            return {
+                "date": date,
+                "digital_twin_state": {},
+                "coupling_summary": {},
+                "message": str(e),
+            }
+
+    @router.get("/history_memory")
+    def history_memory_api(date: Optional[str] = None, limit: int = 10):
+        try:
+            _, df = load_csv_by_date(date) if date else load_latest_csv()
+            result = analyze_tbm_data(df)
+            current_date = date or datetime.now().strftime("%Y-%m-%d")
+            current_record = build_history_record(current_date, result)
+            history_records = load_history_records(limit=limit, before_date=current_date)
+            history_comparison = build_history_comparison(current_record, history_records)
+
+            return {
+                "date": current_date,
+                "current_record": serialize_for_json(current_record),
+                "history_comparison": serialize_for_json(history_comparison),
+            }
+        except Exception as e:
+            print(f"[History Memory API Error] {e}")
+            return {
+                "date": date,
+                "current_record": {},
+                "history_comparison": {
+                    "has_history": False,
+                    "comparison_text": str(e),
+                },
             }
 
     @router.post("/report_by_time")
@@ -275,4 +340,3 @@ def register_tbm_routes(
             }
 
     app.include_router(router)
-

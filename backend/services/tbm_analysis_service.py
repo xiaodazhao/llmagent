@@ -13,6 +13,10 @@ from analysis.forward_risk_advisor import (
     generate_forward_risk_summary,
     forward_risk_to_text,
 )
+from analysis.coupling_analysis import (
+    add_risk_response_coupling,
+    summarize_coupling,
+)
 from config import EVIDENCE_DB_PATH
 from geology.geology_fusion_backend import attach_geology_labels, load_evidence_db
 from geology.geology_summary import (
@@ -25,6 +29,8 @@ from geology.segment_analysis import (
     run_segment_analysis,
     build_typical_segments_table,
 )
+from services.digital_twin_state import build_digital_twin_state
+from utils.chainage_utils import format_chainage_dk
 from utils.serialization import serialize_for_json
 
 def semantic_efficiency_to_text(eff_df: pd.DataFrame) -> str:
@@ -164,6 +170,7 @@ def risk_probability_to_text(df_geo):
             hazard = str(row.get("hazard", "")).strip()
 
             text = f"里程约 DK{ch/1000:.3f} 附近区段表现出相对较高关注特征"
+            text = text.replace(f"DK{ch/1000:.3f}", format_chainage_dk(ch))
             if active_cnt > 0:
                 text += f"，多源关注数为 {active_cnt}"
             if hazard and hazard.lower() != "nan":
@@ -191,6 +198,8 @@ def analyze_tbm_data(df: pd.DataFrame):
 
         geo_summary_record = summarize_geology_record_level(df_geo)
         segment_df = run_segment_analysis(df_geo, segment_length=10)
+        segment_df = add_risk_response_coupling(segment_df)
+        coupling_summary = summarize_coupling(segment_df)
         typical_segments_df = build_typical_segments_table(segment_df, top_n=20)
         geo_summary_segment = summarize_geology_segment_level(segment_df)
         geo_text = geology_summary_to_text(geo_summary_segment)
@@ -207,6 +216,12 @@ def analyze_tbm_data(df: pd.DataFrame):
         df_geo = df.copy()
         segment_df = pd.DataFrame()
         typical_segments_df = pd.DataFrame()
+        coupling_summary = {
+            "has_coupling": False,
+            "level_counts": {},
+            "top_segments": [],
+            "summary_text": "区段风险-施工响应耦合分析不可用。"
+        }
         geo_summary_record = {"has_geology": False, "summary_text": "地质融合分析不可用。"}
         geo_summary_segment = {"has_geology": False, "summary_text": "地质融合分析不可用。"}
         geo_text = "地质融合分析不可用。"
@@ -316,6 +331,18 @@ def analyze_tbm_data(df: pd.DataFrame):
         "状态识别配置": state_cfg
     }
     risk_prob_text = risk_probability_to_text(df_geo)
+    digital_twin_state = build_digital_twin_state(
+        df_geo=df_geo,
+        stats=stats,
+        state_stats=state_stats,
+        gas_stats=gas_stats,
+        geo_summary_segment=geo_summary_segment,
+        forward_risk_summary=forward_risk_summary,
+        coupling_summary=coupling_summary,
+    )
+    llm_summary["区段风险-施工响应耦合分析"] = coupling_summary
+    llm_summary["数字孪生状态"] = digital_twin_state
+
     return {
         "segments": segments,
         "seg_text": seg_text,
@@ -340,6 +367,8 @@ def analyze_tbm_data(df: pd.DataFrame):
         "typical_segments_df": typical_segments_df,
         "forward_risk_summary": forward_risk_summary,
         "forward_risk_text": forward_risk_text,
+        "coupling_summary": coupling_summary,
+        "digital_twin_state": digital_twin_state,
         "llm_summary": llm_summary,
         "face_geo_text": face_geo_text,
         "risk_prob_text": risk_prob_text,
@@ -466,7 +495,9 @@ def build_risk_profile(df_geo: pd.DataFrame):
 
             high_segments.append({
                 "start_chainage": float(g["chainage"].min()),
+                "start_chainage_dk": format_chainage_dk(g["chainage"].min()),
                 "end_chainage": float(g["chainage"].max()),
+                "end_chainage_dk": format_chainage_dk(g["chainage"].max()),
                 "start_rel": float(g["chainage_rel"].min()),
                 "end_rel": float(g["chainage_rel"].max()),
                 "max_attention": int(g["active_source_count"].max()),

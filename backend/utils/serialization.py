@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 
 def serialize_for_json(obj):
@@ -15,5 +16,10 @@ def serialize_for_json(obj):
         return obj.to_dict(orient="records")
     if isinstance(obj, pd.Series):
         return obj.to_dict()
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
     return obj
-

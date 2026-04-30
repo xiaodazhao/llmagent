@@ -10,7 +10,7 @@ def build_prompt_timewindow(
     geo_text: str,
     llm_summary: dict
 ) -> str:
-    forward_risk_text = llm_summary.get("前方区段风险提示文本", "无")
+    forward_risk_text = llm_summary.get("前方风险提示文本", "无")
 
     return f"""
 请直接编写一份正式的《TBM施工时段工况分析报告》。
@@ -100,6 +100,12 @@ TBM施工时段工况分析报告
 
 【地质分析】
 {geo_text}
+
+【区段风险-施工响应耦合分析】
+{llm_summary.get("区段风险-施工响应耦合分析", "无")}
+
+【数字孪生状态摘要】
+{llm_summary.get("数字孪生状态", "无")}
 
 【气体分析】
 {gas_text}

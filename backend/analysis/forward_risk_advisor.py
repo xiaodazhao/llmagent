@@ -1,6 +1,8 @@
 import json
 import pandas as pd
 
+from utils.chainage_utils import format_chainage_dk
+
 
 RISK_SCORE_MAP = {
     "low": 1,
@@ -27,10 +29,7 @@ def _format_dk(chainage):
     if pd.isna(chainage):
         return "未知里程"
 
-    value = float(chainage)
-    km = int(value)
-    m = int(round((value - km) * 1000))
-    return f"DK{km}+{m:03d}"
+    return format_chainage_dk(chainage)
 
 
 def _normalize_hazard(attrs):

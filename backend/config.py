@@ -21,8 +21,11 @@ def get_data_root() -> Path:
             Path("G:/My Drive/TBM9"),
         ]
         for p in candidates:
-            if p.exists():
-                return p
+            try:
+                if p.exists():
+                    return p
+            except PermissionError:
+                continue
 
     # macOS
     cloud_base = Path.home() / "Library/CloudStorage"
@@ -61,9 +64,10 @@ DB_DIR = DATA_ROOT / "DB"
 RESULT_DIR = DATA_ROOT / "result"
 LOG_DIR = DATA_ROOT / "logs"
 DAILY_RESULT_DIR = DATA_ROOT / "result_daily_twin"
+HISTORY_MEMORY_DIR = DATA_ROOT / "analysis_history"
 
 # 自动创建输出目录
-for d in [DB_DIR, RESULT_DIR, LOG_DIR, DAILY_RESULT_DIR]:
+for d in [DB_DIR, RESULT_DIR, LOG_DIR, DAILY_RESULT_DIR, HISTORY_MEMORY_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
 # evidence_db.csv
