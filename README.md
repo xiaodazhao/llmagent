@@ -75,10 +75,12 @@ tbm_data_20230424.csv
 
 ## 环境变量
 
-如果需要生成 AI 日报，需要在后端运行环境中配置：
+如果需要生成 AI 日报，需要在后端运行环境中配置 LLM。默认使用 Gemini：
 
 ```env
+LLM_PROVIDER=google
 GOOGLE_API_KEY=你的 Gemini API Key
+GOOGLE_MODEL=gemini-2.5-flash-lite
 ```
 
 项目提供了 `.env.example` 作为模板。可以参考它创建本地 `.env` 文件：
@@ -87,7 +89,25 @@ GOOGLE_API_KEY=你的 Gemini API Key
 copy .env.example .env
 ```
 
+如果要测试 DeepSeek，可以这样配置：
+
+```env
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=你的 DeepSeek API Key
+DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+```
+
 如果缺少该变量，后端仍可启动，概览、气体、地质等非 LLM 功能仍可使用；生成 AI 日报时会返回明确的配置提示。
+
+后端会尝试读取项目根目录 `.env` 和 `backend/.env`。如果你按下面方式启动：
+
+```powershell
+cd backend
+uvicorn app:app --reload --port 8000
+```
+
+把 `.env` 放在 `backend/.env` 即可。
 
 ## 启动方式
 
@@ -125,6 +145,12 @@ http://127.0.0.1:8000
 
 ```text
 Frontend/src/api/client.js
+```
+
+也可以通过 `Frontend/.env` 覆盖：
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
 ## 主要后端接口

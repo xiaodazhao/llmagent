@@ -21,6 +21,12 @@ http://127.0.0.1:8000
 src/api/client.js
 ```
 
+如需修改后端地址，可以参考 `.env.example` 创建本地 `.env`：
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
 ## 主要页面
 
 ```text
@@ -40,4 +46,3 @@ npm run dev       # 开发服务
 npm run build     # 生产构建
 npm run lint      # 代码检查
 ```
-
