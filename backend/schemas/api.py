@@ -1,0 +1,11 @@
+from pydantic import BaseModel
+
+
+class DailyReportRequest(BaseModel):
+    date: str  # YYYY-MM-DD
+
+
+class TimeWindowRequest(BaseModel):
+    start_time: str
+    end_time: str
+

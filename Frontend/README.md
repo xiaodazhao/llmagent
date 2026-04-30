@@ -1,16 +1,43 @@
-# React + Vite
+# TBM Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+这是 TBM 智能监控与日报分析系统的前端部分，基于 React + Vite 构建。
 
-Currently, two official plugins are available:
+## 启动
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+```powershell
+npm install
+npm run dev
+```
 
-## React Compiler
+默认请求后端：
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```text
+http://127.0.0.1:8000
+```
 
-## Expanding the ESLint configuration
+配置位置：
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```text
+src/api/client.js
+```
+
+## 主要页面
+
+```text
+src/features/dashboard/       主驾驶舱
+src/features/summary/         工况概览
+src/features/geology/         地质融合分析
+src/features/state/           施工状态分析
+src/features/gas/             气体监测
+src/features/risk/            空间风险剖面
+src/features/report/          智能日报与时间窗口报告
+```
+
+## 常用命令
+
+```powershell
+npm run dev       # 开发服务
+npm run build     # 生产构建
+npm run lint      # 代码检查
+```
+

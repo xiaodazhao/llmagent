@@ -1,6 +1,7 @@
 # python
 __pycache__/
 *.pyc
+tempCodeRunnerFile.py
 
 # frontend
 Frontend/node_modules/

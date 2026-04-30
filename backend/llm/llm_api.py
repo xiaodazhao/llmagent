@@ -1,20 +1,33 @@
 import os
 from dotenv import load_dotenv
-from google import genai
 
 # =========================================================
 # 1. 初始化配置
 # =========================================================
 load_dotenv()
 
-API_KEY = os.getenv("GOOGLE_API_KEY")
-
-if not API_KEY:
-    raise ValueError("❌ 未找到 GOOGLE_API_KEY，请检查 .env 文件！")
-
-client = genai.Client(api_key=API_KEY)
-
 DEFAULT_MODEL = "gemini-2.5-flash-lite"
+_client = None
+
+
+def _get_client():
+    """
+    Lazily initialize Gemini client so the backend can start without an API key.
+    Report generation will return a clear error if the key is missing.
+    """
+    global _client
+
+    if _client is not None:
+        return _client
+
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise RuntimeError("未配置 GOOGLE_API_KEY，请先根据 .env.example 创建 .env 文件。")
+
+    from google import genai
+
+    _client = genai.Client(api_key=api_key)
+    return _client
 
 
 # =========================================================
@@ -25,6 +38,7 @@ def call_llm(prompt: str, model: str = DEFAULT_MODEL) -> str:
     调用 Google Gemini 生成文本
     """
     try:
+        client = _get_client()
         response = client.models.generate_content(
             model=model,
             contents=prompt,
@@ -39,6 +53,8 @@ def call_llm(prompt: str, model: str = DEFAULT_MODEL) -> str:
 
         return "⚠️ 模型返回了空内容"
 
+    except RuntimeError as e:
+        return f"⚠️ {e}"
     except Exception as e:
         print(f"❌ LLM 调用报错: {e}")
         return f"[LLM Error] {e}"
