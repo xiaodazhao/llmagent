@@ -145,8 +145,30 @@ def _extract_water_info(flat: str):
 
 
 def _extract_collapse_flag(flat: str) -> int:
-    if "掉块" in flat:
+    """
+    Identify observed collapse/block-fall evidence in sketch records.
+
+    The sketch parser should not mark collapse just because the text contains
+    generic advice such as "防止掉块". Prefer checked form items or explicit
+    observation phrases around the tunnel face.
+    """
+    checked_signals = [
+        "掉块√",
+        "正面掉块√",
+        "随时间松弛、掉块√",
+        "随时间松弛掉块√",
+    ]
+    if any(x in flat for x in checked_signals):
         return 1
+
+    observed_patterns = [
+        r"(掌子面|正面|局部|现场|围岩).{0,8}掉块",
+        r"(存在|出现|发生|可见|已见|有).{0,8}掉块",
+        r"掉块.{0,8}(现象|明显|严重)",
+    ]
+    if any(re.search(pattern, flat) for pattern in observed_patterns):
+        return 1
+
     return 0
 
 

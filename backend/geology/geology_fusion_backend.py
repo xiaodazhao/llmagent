@@ -80,10 +80,14 @@ def attach_geology_labels(df_plc: pd.DataFrame, evidence_df: pd.DataFrame):
         print("PLC 里程为空，返回原始数据。")
         return df
 
-    # 保留有效证据层级
+    # 保留有效证据层级。
+    # point 证据来自掌子面素描等现场观测，fusion.get_active 会按点位缓冲匹配；
+    # overview 是整份报告概览，缺少明确空间约束，仍不参与逐里程融合。
     if "source_level" in evidence_df.columns:
+        evidence_df = evidence_df.copy()
+        evidence_df["source_level"] = evidence_df["source_level"].astype(str).str.strip()
         evidence_df = evidence_df[
-            evidence_df["source_level"].isin(["segment", "report_conclusion"])
+            evidence_df["source_level"].isin(["segment", "report_conclusion", "point"])
         ].copy()
 
     unique_chainage = (

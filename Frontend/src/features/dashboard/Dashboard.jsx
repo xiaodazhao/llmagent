@@ -9,6 +9,7 @@ import ReportPage from "@/features/report/ReportPage";
 import TimeWindowPage from "@/features/report/TimeWindowPage";
 import RiskProfilePage from "@/features/risk/RiskProfilePage";
 import AgentPage from "@/features/agent/AgentPage";
+import EvidenceImportPage from "@/features/evidence/EvidenceImportPage";
 
 export default function Dashboard() {
   const [dates, setDates] = useState([]);
@@ -70,10 +71,12 @@ export default function Dashboard() {
 
       <section style={styles.quickBar}>
         <QuickStat label="当前日期" value={currentDate || "--"} />
-        <QuickStat label="核心模块" value="6 个" />
+        <QuickStat label="核心模块" value="7 个" />
         <QuickStat label="分析模式" value="日报 / 时段 / 问答" />
         <QuickStat label="问答助手" value={agentOpen ? "已打开" : "待唤起"} />
       </section>
+
+      <EvidenceImportPage />
 
       <section style={styles.grid}>
         <Panel title="工况概览" eyebrow="施工节奏">

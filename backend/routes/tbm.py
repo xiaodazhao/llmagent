@@ -9,7 +9,8 @@ from agent.tbm_agent import TBMAgent
 from llm.llm_api import call_llm
 from llm.prompt_builder import build_prompt
 from llm.prompt_builder_timewindow import build_prompt_timewindow
-from schemas.api import AgentRequest, DailyReportRequest, TimeWindowRequest
+from schemas.api import AgentRequest, DailyReportRequest, EvidenceImportRequest, TimeWindowRequest
+from services.evidence_import_service import import_evidence_files
 from services.history_memory_service import (
     build_history_comparison,
     build_history_record,
@@ -75,6 +76,23 @@ def register_tbm_routes(
     @router.get("/agent_v2/capabilities")
     def tbm_supervisor_agent_capabilities():
         return tbm_supervisor_agent.capabilities()
+
+    @router.post("/evidence/import")
+    def import_evidence_api(req: EvidenceImportRequest):
+        try:
+            result = import_evidence_files(
+                paths=req.paths,
+                source_type=req.source_type,
+                dry_run=req.dry_run,
+                replace_existing=req.replace_existing,
+                recursive=req.recursive,
+            )
+            return serialize_for_json(result)
+        except Exception as e:
+            return {
+                "ok": False,
+                "message": str(e),
+            }
 
     @router.post("/report")
     def generate_daily_report(req: DailyReportRequest):

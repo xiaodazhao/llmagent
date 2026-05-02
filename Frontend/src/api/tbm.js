@@ -11,6 +11,7 @@ export const tbmApi = {
   runAgent: (payload) => api.post("/api/tbm/agent", payload),
   getAgentV2Capabilities: () => api.get("/api/tbm/agent_v2/capabilities"),
   runAgentV2: (payload) => api.post("/api/tbm/agent_v2", payload),
+  importEvidence: (payload) => api.post("/api/tbm/evidence/import", payload),
   generateReport: (date) => api.post("/api/tbm/report", { date }),
   generateTimeWindowReport: (payload) =>
     api.post("/api/tbm/report_by_time", payload),
