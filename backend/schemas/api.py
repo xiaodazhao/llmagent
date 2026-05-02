@@ -9,3 +9,8 @@ class TimeWindowRequest(BaseModel):
     start_time: str
     end_time: str
 
+
+class AgentRequest(BaseModel):
+    query: str
+    date: str | None = None
+    use_llm: bool = False

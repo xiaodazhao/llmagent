@@ -1,80 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import api from "@/api/client";
-import GasChart from "@/features/gas/GasChart";
-
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from "recharts";
-function StatCard({ label, value, color = "#2563eb", bg = "#eff6ff" }) {
-  return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 14,
-        padding: 18,
-        minHeight: 110,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 13,
-          color: "#64748b",
-          marginBottom: 10,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <span>{label}</span>
-        <span
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 10,
-            background: bg,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color,
-            fontWeight: 700,
-            fontSize: 14,
-          }}
-        >
-          ●
-        </span>
-      </div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", lineHeight: 1.1 }}>
-        {value ?? 0}
-      </div>
-    </div>
-  );
-}
-
-function formatNumber(v, digits = 2) {
-  const num = Number(v);
-  if (Number.isNaN(num)) return "--";
-  return num.toFixed(digits);
-}
-
-function riskColor(risk) {
-  const r = String(risk).toLowerCase();
-  if (r === "high" || r === "高风险") return "#ef4444";
-  if (r === "medium" || r === "中风险") return "#f59e0b";
-  if (r === "low" || r === "低风险") return "#10b981";
-  return "#94a3b8";
-}
-
-function riskBg(risk) {
-  const r = String(risk).toLowerCase();
-  if (r === "high" || r === "高风险") return "#fee2e2";
-  if (r === "medium" || r === "中风险") return "#fef3c7";
-  if (r === "low" || r === "低风险") return "#dcfce7";
-  return "#f1f5f9";
-}
 
 export default function GeologyPage({ date }) {
   const [data, setData] = useState(null);
@@ -84,93 +20,80 @@ export default function GeologyPage({ date }) {
     if (!date) return;
     setData(null);
     setError(false);
-
     api
       .get(`/api/tbm/geology?date=${date}`)
-      .then((res) => {
-        setData(res.data || { record_summary: {}, segment_summary: {}, typical_segments: [] });
-      })
+      .then((res) => setData(res.data || {}))
       .catch((err) => {
-        console.error("地质融合分析加载失败:", err);
+        console.error("地质融合数据加载失败", err);
         setError(true);
       });
   }, [date]);
 
-  const recordSummary = data?.record_summary || {};
   const segmentSummary = data?.segment_summary || {};
+  const recordSummary = data?.record_summary || {};
   const typicalSegments = data?.typical_segments || [];
 
-  // 构造柱状图数据
-  const barData = useMemo(() => [
-    { name: "低风险", value: recordSummary?.risk_counts?.low || 0, color: "#10b981" },
-    { name: "中风险", value: recordSummary?.risk_counts?.medium || 0, color: "#f59e0b" },
-    { name: "高风险", value: recordSummary?.risk_counts?.high || 0, color: "#ef4444" },
-  ], [recordSummary]);
+  const barData = useMemo(() => {
+    const counts = recordSummary?.risk_counts || {};
+    return [
+      { name: "低风险", value: Number(counts.low || 0), color: "#0f766e" },
+      { name: "中风险", value: Number(counts.medium || 0), color: "#d97706" },
+      { name: "高风险", value: Number(counts.high || 0), color: "#dc2626" },
+    ];
+  }, [recordSummary]);
 
-  const cards = useMemo(() => [
-    { label: "高风险区段数", value: segmentSummary.high_risk_segment_count ?? 0, color: "#dc2626", bg: "#fee2e2" },
-    { label: "多源关注区段数", value: segmentSummary.multi_source_segment_count ?? 0, color: "#d97706", bg: "#fef3c7" },
-    { label: "典型区段数", value: typicalSegments.length ?? 0, color: "#2563eb", bg: "#dbeafe" },
-  ], [segmentSummary, typicalSegments]);
-
-  if (error) return <div style={styles.emptyBox}>❌ 地质融合分析数据加载失败</div>;
-  if (!data) return <div style={styles.emptyBox}>正在加载地质融合分析结果…</div>;
+  if (error) return <Empty text="地质融合数据加载失败" />;
+  if (!data) return <Empty text="正在加载地质融合数据..." />;
 
   return (
     <div style={styles.wrapper}>
-      {/* 1. 顶部指标卡 */}
-      <div style={styles.cardGrid}>
-        {cards.map((item, idx) => (
-          <StatCard key={idx} label={item.label} value={item.value} color={item.color} bg={item.bg} />
-        ))}
+      <div style={styles.kpiGrid}>
+        <Kpi label="高风险区段" value={segmentSummary.high_risk_segment_count ?? 0} tone="red" />
+        <Kpi label="多源证据区段" value={segmentSummary.multi_source_segment_count ?? 0} tone="amber" />
+        <Kpi label="典型区段" value={typicalSegments.length} tone="blue" />
       </div>
 
-      {/* 2. 区段级摘要 & 风险分布图 (左右布局) */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 16 }}>
-        <div style={styles.sectionCard}>
-          <div style={styles.sectionTitle}>🧠 区段级地质融合摘要</div>
-          <div style={styles.summaryText}>
-            {segmentSummary.summary_text || "暂无区段级地质摘要。"}
-          </div>
-        </div>
+      <div style={styles.mainGrid}>
+        <section style={styles.sectionCard}>
+          <div style={styles.sectionTitle}>区段分析摘要</div>
+          <p style={styles.summaryText}>
+            {cleanText(segmentSummary.summary_text) || "当前日期暂未形成可用的区段级地质融合摘要。"}
+          </p>
+        </section>
 
-        {/* 新加入的风险等级分布图 */}
-        <div style={{ ...styles.sectionCard, background: "#fff" }}>
-          <div style={styles.sectionTitle}>📊 风险等级分布 (记录级)</div>
-          <div style={{ width: "100%", height: 220, marginTop: 10 }}>
+        <section style={styles.sectionCard}>
+          <div style={styles.sectionTitle}>风险等级分布</div>
+          <div style={styles.chartWrap}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} />
-                <Tooltip 
-                   cursor={{ fill: '#f8fafc' }}
-                   contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                />
-                <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
-                  {barData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+              <BarChart data={barData} margin={{ top: 8, right: 10, bottom: 0, left: -24 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  {barData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </section>
       </div>
 
-      {/* 3. 记录级摘要 */}
-      <details style={styles.sectionCard}>
-        <summary style={{ ...styles.sectionTitle, cursor: "pointer" }}>📄 记录级摘要（点击展开）</summary>
-        <div style={{ ...styles.summaryText, marginTop: 12 }}>
-          {recordSummary.summary_text || "暂无记录级摘要。"}
-        </div>
-      </details>
+      <section style={styles.sectionCard}>
+        <details>
+          <summary style={styles.summaryTitle}>记录级摘要</summary>
+          <p style={styles.summaryText}>
+            {cleanText(recordSummary.summary_text) || "当前日期暂未形成可用的记录级地质摘要。"}
+          </p>
+        </details>
+      </section>
 
-      {/* 4. 典型区段表 */}
-      <div style={{ ...styles.sectionCard, flex: 1, minHeight: 0 }}>
-        <div style={styles.sectionTitle}>📍 典型区段识别结果</div>
+      <section style={{ ...styles.sectionCard, flex: 1, minHeight: 0 }}>
+        <div style={styles.sectionTitle}>典型风险区段</div>
         {typicalSegments.length === 0 ? (
-          <div style={styles.emptyInner}>暂无典型区段数据</div>
+          <Empty text="暂无典型风险区段" compact />
         ) : (
           <div style={styles.tableWrap}>
             <table style={styles.table}>
@@ -178,49 +101,183 @@ export default function GeologyPage({ date }) {
                 <tr>
                   <th style={styles.th}>区段</th>
                   <th style={styles.th}>风险等级</th>
-                  <th style={styles.th}>多源关注</th>
-                  <th style={styles.th}>平均推进速度</th>
-                  <th style={styles.th}>平均推力</th>
-                  <th style={styles.th}>结论</th>
+                  <th style={styles.th}>风险得分</th>
+                  <th style={styles.th}>证据源数量</th>
+                  <th style={styles.th}>耦合标签</th>
+                  <th style={styles.th}>解释</th>
                 </tr>
               </thead>
               <tbody>
-                {typicalSegments.map((row, idx) => {
-                  const risk = row.risk_mode || row.risk || "";
-                  return (
-                    <tr key={idx}>
-                      <td style={styles.td}>{row.segment || "--"}</td>
-                      <td style={styles.td}>
-                        <span style={{ display: "inline-block", padding: "2px 10px", borderRadius: 999, background: riskBg(risk), color: riskColor(risk), fontSize: 12, fontWeight: 700 }}>
-                          {risk || "--"}
-                        </span>
-                      </td>
-                      <td style={styles.td}>{row.active_source_count_max ?? "--"}</td>
-                      <td style={styles.td}>{formatNumber(row["推进速度_mean"], 2)}</td>
-                      <td style={styles.td}>{formatNumber(row["推力_mean"], 2)}</td>
-                      <td style={{ ...styles.td, whiteSpace: 'normal', minWidth: 200 }}>{row.interpretation || "--"}</td>
-                    </tr>
-                  );
-                })}
+                {typicalSegments.slice(0, 12).map((row, index) => (
+                  <tr key={`${row.segment || index}`}>
+                    <td style={styles.td}>{row.segment || "--"}</td>
+                    <td style={styles.td}>
+                      <RiskBadge risk={row.risk_mode || row.risk || row.fused_grade_mode} />
+                    </td>
+                    <td style={styles.td}>{format(row.risk_score_max)}</td>
+                    <td style={styles.td}>{row.active_source_count_max ?? "--"}</td>
+                    <td style={styles.td}>{row.coupling_label || "--"}</td>
+                    <td style={{ ...styles.td, minWidth: 220 }}>
+                      {cleanText(row.coupling_interpretation || row.interpretation) || "--"}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
 
+function Kpi({ label, value, tone }) {
+  const tones = {
+    red: ["#fef2f2", "#dc2626"],
+    amber: ["#fffbeb", "#d97706"],
+    blue: ["#eff6ff", "#2563eb"],
+  };
+  const [bg, color] = tones[tone] || tones.blue;
+  return (
+    <div style={{ ...styles.kpi, background: bg }}>
+      <span>{label}</span>
+      <strong style={{ color }}>{value}</strong>
+    </div>
+  );
+}
+
+function RiskBadge({ risk }) {
+  const text = riskText(risk);
+  const style = text === "高风险" ? styles.riskHigh : text === "中风险" ? styles.riskMedium : styles.riskLow;
+  return <span style={{ ...styles.riskBadge, ...style }}>{text}</span>;
+}
+
+function Empty({ text, compact = false }) {
+  return <div style={{ ...styles.empty, minHeight: compact ? 96 : "100%" }}>{text}</div>;
+}
+
+function riskText(risk) {
+  const raw = String(risk || "").toLowerCase();
+  if (raw.includes("high") || raw.includes("高")) return "高风险";
+  if (raw.includes("medium") || raw.includes("中")) return "中风险";
+  if (raw.includes("low") || raw.includes("低")) return "低风险";
+  return risk || "--";
+}
+
+function format(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : "--";
+}
+
+function cleanText(v) {
+  if (!v) return "";
+  return String(v).replace(/\s+/g, " ").trim();
+}
+
 const styles = {
-  wrapper: { height: "100%", display: "flex", flexDirection: "column", gap: 16, paddingBottom: 20 },
-  cardGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 },
-  sectionCard: { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 16 },
-  sectionTitle: { fontSize: 15, fontWeight: 700, color: "#334155" },
-  summaryText: { fontSize: 14, color: "#475569", lineHeight: 1.8, whiteSpace: "pre-wrap" },
-  tableWrap: { marginTop: 8, overflowX: "auto", overflowY: "auto", maxHeight: 350, borderRadius: 10, border: "1px solid #e2e8f0", background: "#fff" },
-  table: { width: "100%", borderCollapse: "collapse" },
-  th: { position: "sticky", top: 0, background: "#f1f5f9", padding: "10px 12px", textAlign: "left", fontSize: 13, zIndex: 1 },
-  td: { fontSize: 13, color: "#475569", padding: "10px 12px", borderBottom: "1px solid #f1f5f9" },
-  emptyBox: { height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8" },
-  emptyInner: { padding: 30, textAlign: "center", color: "#94a3b8" }
+  wrapper: {
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
+  },
+  kpiGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 10,
+  },
+  kpi: {
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 12,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  mainGrid: {
+    display: "grid",
+    gridTemplateColumns: "1.25fr 1fr",
+    gap: 14,
+  },
+  sectionCard: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+  },
+  sectionTitle: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: 900,
+    marginBottom: 10,
+  },
+  summaryTitle: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  summaryText: {
+    color: "#475569",
+    fontSize: 14,
+    lineHeight: 1.8,
+    margin: "8px 0 0",
+  },
+  chartWrap: {
+    height: 190,
+  },
+  tableWrap: {
+    maxHeight: 300,
+    overflow: "auto",
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: 13,
+  },
+  th: {
+    position: "sticky",
+    top: 0,
+    background: "#f8fafc",
+    color: "#475569",
+    textAlign: "left",
+    padding: "10px 12px",
+    borderBottom: "1px solid #e2e8f0",
+    whiteSpace: "nowrap",
+  },
+  td: {
+    color: "#334155",
+    padding: "10px 12px",
+    borderBottom: "1px solid #f1f5f9",
+    verticalAlign: "top",
+    whiteSpace: "nowrap",
+  },
+  riskBadge: {
+    display: "inline-flex",
+    borderRadius: 999,
+    padding: "3px 9px",
+    fontSize: 12,
+    fontWeight: 900,
+  },
+  riskHigh: {
+    background: "#fee2e2",
+    color: "#b91c1c",
+  },
+  riskMedium: {
+    background: "#fffbeb",
+    color: "#b45309",
+  },
+  riskLow: {
+    background: "#dcfce7",
+    color: "#166534",
+  },
+  empty: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#94a3b8",
+    textAlign: "center",
+  },
 };

@@ -4,10 +4,11 @@ from typing import Optional
 import pandas as pd
 from fastapi import APIRouter, FastAPI
 
+from agent.tbm_agent import TBMAgent
 from llm.llm_api import call_llm
 from llm.prompt_builder import build_prompt
 from llm.prompt_builder_timewindow import build_prompt_timewindow
-from schemas.api import DailyReportRequest, TimeWindowRequest
+from schemas.api import AgentRequest, DailyReportRequest, TimeWindowRequest
 from services.history_memory_service import (
     build_history_comparison,
     build_history_record,
@@ -26,6 +27,11 @@ def register_tbm_routes(
     build_speed_profile,
 ):
     router = APIRouter(prefix="/api/tbm", tags=["tbm"])
+    tbm_agent = TBMAgent(
+        analyze_tbm_data=analyze_tbm_data,
+        build_risk_profile=build_risk_profile,
+        build_speed_profile=build_speed_profile,
+    )
 
     @router.get("/dates")
     def get_available_dates():
@@ -38,6 +44,18 @@ def register_tbm_routes(
                 pass
         dates.sort(reverse=True)
         return {"dates": dates}
+
+    @router.post("/agent")
+    def run_tbm_agent(req: AgentRequest):
+        return tbm_agent.run(
+            query=req.query,
+            date=req.date,
+            use_llm=req.use_llm,
+        )
+
+    @router.get("/agent/capabilities")
+    def tbm_agent_capabilities():
+        return tbm_agent.capabilities()
 
     @router.post("/report")
     def generate_daily_report(req: DailyReportRequest):

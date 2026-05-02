@@ -1,119 +1,96 @@
 import {
-  BarChart,
   Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
+  BarChart,
+  CartesianGrid,
   Legend,
   ResponsiveContainer,
-  CartesianGrid,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
 
-const SHORT_NAMES = {
-  "CO2检测": "CO₂",
-  "H2S检测": "H₂S",
-  "SO2检测": "SO₂",
-  "NO2检测": "NO₂",
-  "NO检测": "NO",
-  "CH4检测": "CH₄",
-};
-
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div
-        style={{
-          backgroundColor: "rgba(255, 255, 255, 0.96)",
-          border: "1px solid #ddd",
-          padding: "10px",
-          borderRadius: "6px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-          fontSize: "13px",
-        }}
-      >
-        <p style={{ fontWeight: "bold", marginBottom: 6 }}>{label}</p>
-        {payload.map((entry, index) => (
-          <p key={index} style={{ color: entry.color, margin: 0 }}>
-            {entry.name}: {Number(entry.value).toFixed(3)}
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
+const GAS_LABELS = {
+  CO2: "CO2",
+  H2S: "H2S",
+  SO2: "SO2",
+  NO2: "NO2",
+  NO: "NO",
+  CH4: "CH4",
 };
 
 export default function GasChart({ gasData }) {
-  const data = Object.keys(gasData || {})
-    .filter((k) => gasData[k] && typeof gasData[k].max === "number")
-    .map((k) => ({
-      gas: SHORT_NAMES[k] ?? k,
-      min: Math.max(0, Number(gasData[k].min ?? 0)),
-      mean: Math.max(0, Number(gasData[k].mean ?? 0)),
-      max: Math.max(0, Number(gasData[k].max ?? 0)),
+  const data = Object.entries(gasData || {})
+    .map(([key, item]) => ({
+      gas: gasLabel(key),
+      min: clamp(item?.min),
+      mean: clamp(item?.mean),
+      max: clamp(item?.max),
     }))
     .filter((item) => item.max !== 0 || item.mean !== 0 || item.min !== 0);
 
   if (!data.length) {
     return (
-      <div
-        style={{
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#94a3b8",
-          fontSize: 14,
-        }}
-      >
-        当前视图下暂无可展示的气体统计数据
+      <div style={styles.empty}>
+        暂无气体统计数据
       </div>
     );
   }
 
   return (
-    <div style={{ height: 350 }}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} barGap={6} barCategoryGap={28}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} barGap={6} barCategoryGap={22}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+        <XAxis dataKey="gas" tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fill: "#64748b", fontSize: 12 }} axisLine={false} tickLine={false} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(15, 118, 110, 0.06)" }} />
+        <Legend iconType="circle" wrapperStyle={{ paddingTop: 10 }} />
+        <Bar dataKey="min" fill="#14b8a6" name="最小值" radius={[5, 5, 0, 0]} />
+        <Bar dataKey="mean" fill="#2563eb" name="平均值" radius={[5, 5, 0, 0]} />
+        <Bar dataKey="max" fill="#f97316" name="最大值" radius={[5, 5, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
 
-          <XAxis
-            dataKey="gas"
-            tick={{ fill: "#666", fontSize: 12 }}
-            axisLine={{ stroke: "#e0e0e0" }}
-          />
-          <YAxis
-            tick={{ fill: "#999", fontSize: 12 }}
-            axisLine={false}
-            tickLine={false}
-          />
-
-          <Tooltip content={<CustomTooltip />} cursor={{ fill: "transparent" }} />
-          <Legend iconType="circle" wrapperStyle={{ paddingTop: "10px" }} />
-
-          <Bar
-            dataKey="min"
-            fill="#34d399"
-            name="最小值"
-            radius={[4, 4, 0, 0]}
-            animationDuration={900}
-          />
-          <Bar
-            dataKey="mean"
-            fill="#60a5fa"
-            name="平均值"
-            radius={[4, 4, 0, 0]}
-            animationDuration={900}
-          />
-          <Bar
-            dataKey="max"
-            fill="#f87171"
-            name="最大值"
-            radius={[4, 4, 0, 0]}
-            animationDuration={900}
-          />
-        </BarChart>
-      </ResponsiveContainer>
+function CustomTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={styles.tooltip}>
+      <strong>{label}</strong>
+      {payload.map((entry) => (
+        <div key={entry.name} style={{ color: entry.color, marginTop: 4 }}>
+          {entry.name}：{Number(entry.value).toFixed(3)}
+        </div>
+      ))}
     </div>
   );
 }
+
+function gasLabel(key) {
+  const upper = String(key).toUpperCase();
+  const match = Object.keys(GAS_LABELS).find((name) => upper.includes(name));
+  return match ? GAS_LABELS[match] : key;
+}
+
+function clamp(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+const styles = {
+  empty: {
+    height: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#94a3b8",
+  },
+  tooltip: {
+    background: "rgba(255,255,255,0.98)",
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
+    padding: 12,
+    boxShadow: "0 14px 30px rgba(15, 23, 42, 0.12)",
+    fontSize: 13,
+  },
+};

@@ -1,30 +1,7 @@
-import { useEffect, useState } from "react";
-import api from "@/api/client";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { useEffect, useMemo, useState } from "react";
+import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
-// 子组件：统计卡片
-function Card({ title, value }) {
-  return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1px solid #e2e8f0",
-        borderRadius: 14,
-        padding: 18,
-        minHeight: 110,
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-      }}
-    >
-      <div style={{ fontSize: 13, color: "#64748b" }}>{title}</div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: "#0f172a" }}>
-        {value ?? 0}
-      </div>
-    </div>
-  );
-}
+import api from "@/api/client";
 
 export default function SummaryPage({ date }) {
   const [data, setData] = useState(null);
@@ -36,120 +13,177 @@ export default function SummaryPage({ date }) {
       .get(`/api/tbm/summary?date=${date}`)
       .then((res) => setData(res.data || {}))
       .catch((err) => {
-        console.error("概览加载失败:", err);
+        console.error("概览数据加载失败", err);
         setData({});
       });
   }, [date]);
 
-  if (!data) {
-    return <div style={styles.loading}>正在加载概览…</div>;
-  }
+  const pieData = useMemo(() => {
+    if (!data) return [];
+    return [
+      { name: "掘进", value: number(data.work_total_min), color: "#0f766e" },
+      { name: "停机", value: number(data.stop_total_min), color: "#dc2626" },
+      { name: "过渡", value: number(data.transition_total_min), color: "#2563eb" },
+      { name: "异常", value: number(data.abnormal_total_min), color: "#d97706" },
+    ].filter((item) => item.value > 0);
+  }, [data]);
 
-  // 准备饼图数据，确保 value 为数字
-  const pieData = [
-    { name: "掘进", value: Number(data.work_total_min || 0) },
-    { name: "停机", value: Number(data.stop_total_min || 0) },
-    { name: "过渡", value: Number(data.transition_total_min || 0) },
-    { name: "异常", value: Number(data.abnormal_total_min || 0) },
-  ];
+  if (!data) {
+    return <Empty text="正在加载工况概览..." />;
+  }
 
   return (
     <div style={styles.wrapper}>
-      {/* ===== 第一组：施工统计 ===== */}
-      <section>
-        <div style={styles.sectionTitle}>⚙️ 施工工况统计</div>
-        <div style={styles.grid}>
-          <Card title="稳定掘进段数" value={data.work_count} />
-          <Card title="停机段数" value={data.stop_count} />
-          <Card title="稳定掘进总时长 (min)" value={round(data.work_total_min)} />
-          <Card title="停机总时长 (min)" value={round(data.stop_total_min)} />
-        </div>
-      </section>
+      <div style={styles.statGrid}>
+        <StatCard label="掘进次数" value={data.work_count} tone="green" />
+        <StatCard label="停机次数" value={data.stop_count} tone="red" />
+        <StatCard label="掘进时长" value={format(data.work_total_min)} unit="分钟" tone="blue" />
+        <StatCard label="停机时长" value={format(data.stop_total_min)} unit="分钟" tone="amber" />
+      </div>
 
-      {/* ===== 第二组：地质风险概览 ===== */}
-      <section>
-        <div style={styles.sectionTitle}>🪨 地质风险概览</div>
-        <div style={styles.grid}>
-          <Card title="高风险区段数" value={data.geology_high_risk_segment_count} />
-          <Card title="多源关注区段数" value={data.geology_multi_source_segment_count} />
-          <Card title="异常工况段数" value={data.abnormal_count} />
-          <Card title="过渡段数" value={data.transition_count} />
-        </div>
-      </section>
+      <div style={styles.statGrid}>
+        <StatCard label="高风险区段" value={data.geology_high_risk_segment_count} tone="red" />
+        <StatCard label="多源证据区段" value={data.geology_multi_source_segment_count} tone="amber" />
+        <StatCard label="异常片段" value={data.abnormal_count} tone="slate" />
+        <StatCard label="过渡片段" value={data.transition_count} tone="blue" />
+      </div>
 
-      {/* ===== 第三组：加入饼图展示 ===== */}
-      <section style={styles.chartSection}>
-        <div style={styles.sectionTitle}>⏱️ 工况时间占比</div>
-        <div style={styles.chartContainer}>
-          <div style={{ width: "100%", height: 300 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  innerRadius={60} // 改成环形图，更高级
-                  paddingAngle={5}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
-                  <Cell fill="#16a34a" /> {/* 掘进 */}
-                  <Cell fill="#dc2626" /> {/* 停机 */}
-                  <Cell fill="#0ea5e9" /> {/* 过渡 */}
-                  <Cell fill="#7c3aed" /> {/* 异常 */}
-                </Pie>
-                <Tooltip />
-                <Legend verticalAlign="bottom" height={36} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+      <section style={styles.chartCard}>
+        <div style={styles.sectionTitle}>工况时间占比</div>
+        {pieData.length ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie
+                data={pieData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="48%"
+                outerRadius={88}
+                innerRadius={52}
+                paddingAngle={4}
+              >
+                {pieData.map((item) => (
+                  <Cell key={item.name} fill={item.color} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value) => [`${Number(value).toFixed(1)} 分钟`, "时长"]} />
+              <Legend verticalAlign="bottom" height={32} />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <Empty text="暂无可绘制的工况占比数据" />
+        )}
       </section>
     </div>
   );
 }
 
-function round(v) {
-  const num = Number(v);
-  return isNaN(num) ? "--" : num.toFixed(1);
+function StatCard({ label, value, unit, tone }) {
+  const colors = {
+    green: ["#ecfdf5", "#0f766e"],
+    red: ["#fef2f2", "#dc2626"],
+    blue: ["#eff6ff", "#2563eb"],
+    amber: ["#fffbeb", "#d97706"],
+    slate: ["#f8fafc", "#475569"],
+  };
+  const [bg, color] = colors[tone] || colors.slate;
+
+  return (
+    <div style={styles.statCard}>
+      <div style={styles.statLabel}>{label}</div>
+      <div style={{ ...styles.statValue, color }}>
+        {value ?? 0}
+        {unit && <span style={styles.unit}>{unit}</span>}
+      </div>
+      <div style={{ ...styles.statBar, background: bg }}>
+        <span style={{ ...styles.statBarInner, background: color }} />
+      </div>
+    </div>
+  );
+}
+
+function Empty({ text }) {
+  return <div style={styles.empty}>{text}</div>;
+}
+
+function number(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function format(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(1) : "--";
 }
 
 const styles = {
   wrapper: {
     display: "flex",
     flexDirection: "column",
-    gap: 24,
+    gap: 16,
     height: "100%",
-    paddingBottom: 40,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: 700,
-    color: "#334155",
-    marginBottom: 12,
-  },
-  grid: {
+  statGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-    gap: 14,
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 12,
   },
-  chartSection: {
-    marginTop: 10,
-  },
-  chartContainer: {
+  statCard: {
     background: "#fff",
     border: "1px solid #e2e8f0",
-    borderRadius: 14,
-    padding: 20,
-    boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 104,
+    boxShadow: "0 8px 22px rgba(15, 23, 42, 0.05)",
   },
-  loading: {
+  statLabel: {
+    color: "#64748b",
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 26,
+    fontWeight: 900,
+    lineHeight: 1.15,
+  },
+  unit: {
+    marginLeft: 4,
+    fontSize: 12,
+    color: "#94a3b8",
+    fontWeight: 700,
+  },
+  statBar: {
+    height: 5,
+    borderRadius: 999,
+    overflow: "hidden",
+    marginTop: 12,
+  },
+  statBarInner: {
+    display: "block",
+    width: "58%",
     height: "100%",
+    borderRadius: 999,
+  },
+  chartCard: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 312,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: "#0f172a",
+    marginBottom: 8,
+  },
+  empty: {
+    minHeight: 160,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     color: "#94a3b8",
+    textAlign: "center",
   },
 };

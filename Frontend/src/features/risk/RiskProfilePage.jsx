@@ -1,28 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ResponsiveContainer,
-  LineChart,
+  CartesianGrid,
+  Legend,
   Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ReferenceLine,
-  Legend,
 } from "recharts";
+
 import api from "@/api/client";
-/**
- * 里程格式化工具
- */
-function formatChainage(chainage) {
-  if (chainage === null || chainage === undefined || Number.isNaN(Number(chainage))) {
-    return "";
-  }
-  const value = Number(chainage);
-  const km = Math.floor(value / 1000);
-  const m = value % 1000;
-  return `DK${km}+${m.toFixed(2)}`;
-}
 
 export default function RiskProfilePage({ date }) {
   const [data, setData] = useState(null);
@@ -32,14 +21,11 @@ export default function RiskProfilePage({ date }) {
     if (!date) return;
     setData(null);
     setError(false);
-
     api
       .get(`/api/tbm/risk_profile?date=${date}`)
-      .then((res) => {
-        setData(res.data || {});
-      })
+      .then((res) => setData(res.data || {}))
       .catch((err) => {
-        console.error("空间风险剖面加载失败:", err);
+        console.error("空间风险剖面加载失败", err);
         setError(true);
       });
   }, [date]);
@@ -48,142 +34,174 @@ export default function RiskProfilePage({ date }) {
   const profile = riskProfile?.profile || [];
   const speedProfile = data?.speed_profile || [];
 
-  // 合并风险数据与推进速度数据
   const mergedData = useMemo(() => {
-    if (!profile?.length) return [];
     const speedMap = new Map();
-    (speedProfile || []).forEach((s) => {
-      speedMap.set(Number(s.chainage), Number(s["推进速度"]));
+    speedProfile.forEach((row) => {
+      speedMap.set(Number(row.chainage), firstNumeric(row, ["chainage"]));
     });
-    return profile.map((p) => ({
-      chainage: Number(p.chainage),
-      active_source_count: Number(p.active_source_count || 0),
-      推进速度: speedMap.get(Number(p.chainage)) ?? null,
+    return profile.map((row) => ({
+      chainage: Number(row.chainage),
+      active_source_count: Number(row.active_source_count || 0),
+      speed: speedMap.get(Number(row.chainage)) ?? null,
     }));
   }, [profile, speedProfile]);
 
-  if (error) return <div style={styles.emptyBox}>❌ 空间风险剖面加载失败</div>;
-  if (!data) return <div style={styles.emptyBox}>正在加载空间风险剖面…</div>;
+  if (error) return <Empty text="空间风险剖面加载失败" />;
+  if (!data) return <Empty text="正在加载空间风险剖面..." />;
 
   return (
     <div style={styles.wrapper}>
-      {/* 顶部简要说明 */}
-      <div style={styles.infoBox}>
-        <div style={styles.infoTitle}>📈 风险-推进速度耦合分析</div>
-        <div style={styles.infoText}>
-          通过叠加地质风险（左轴）与掘进速度（右轴），识别高风险区间对施工进度的实际影响。
-        </div>
-      </div>
+      <section style={styles.infoBox}>
+        <div style={styles.infoTitle}>风险与掘进响应关联</div>
+        <p style={styles.infoText}>
+          该图将地质风险证据源数量与掘进速度沿里程展开，用于观察高风险区段是否伴随速度衰减或施工响应异常。
+        </p>
+      </section>
 
-      {/* 耦合图表卡片 */}
-      <div style={styles.chartCard}>
-        <div style={styles.chartTitle}>隧道里程风险与推进速度耦合分布图</div>
-        <div style={styles.chartInner}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={mergedData} margin={{ top: 20, right: 60, left: 20, bottom: 60 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              
-              <XAxis
-                dataKey="chainage"
-                tickFormatter={(v) => formatChainage(v)}
-                tick={{ fontSize: 11, fill: "#64748b" }}
-                minTickGap={60}
-                label={{ value: "隧道里程 (DK标号)", position: "insideBottom", offset: -40, fill: "#475569", fontWeight: 600 }}
-              />
-
-              {/* 左侧 Y 轴：风险关注度 */}
-              <YAxis
-                yAxisId="left"
-                tick={{ fontSize: 12, fill: "#64748b" }}
-                allowDecimals={false}
-                label={{ value: "风险关注度 (命中数)", angle: -90, position: "insideLeft", offset: 15, fill: "#dc2626" }}
-              />
-
-              {/* 右侧 Y 轴：推进速度 */}
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                tick={{ fontSize: 12, fill: "#64748b" }}
-                label={{ value: "推进速度 (mm/min)", angle: 90, position: "insideRight", offset: 15, fill: "#2563eb" }}
-              />
-
-              <Tooltip 
-                labelFormatter={(label) => `里程位置：${formatChainage(label)}`}
-                contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
-              />
-              
-              <Legend 
-                verticalAlign="top" 
-                align="right" 
-                height={50}
-                iconType="rect"
-              />
-
-              {/* 高风险警戒线 */}
-              <ReferenceLine 
-                yAxisId="left"
-                y={4} 
-                stroke="#f59e0b" 
-                strokeDasharray="5 5" 
-                label={{ position: 'right', value: '关注阈值:4', fill: '#d97706', fontSize: 12, fontWeight: 700 }} 
-              />
-
-              {/* 风险曲线 */}
-              <Line 
-                yAxisId="left"
-                type="monotone" 
-                dataKey="active_source_count" 
-                stroke="#dc2626" 
-                strokeWidth={3} 
-                dot={false} 
-                activeDot={{ r: 6 }}
-                name="风险关注度" 
-              />
-
-              {/* 速度曲线 */}
-              <Line 
-                yAxisId="right"
-                type="monotone" 
-                dataKey="推进速度" 
-                stroke="#2563eb" 
-                strokeWidth={2} 
-                strokeDasharray="5 2"
-                dot={false} 
-                name="平均推进速度" 
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      <section style={styles.chartCard}>
+        <div style={styles.chartTitle}>里程风险剖面</div>
+        {mergedData.length === 0 ? (
+          <Empty text="暂无可绘制的风险剖面数据" compact />
+        ) : (
+          <div style={styles.chartInner}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={mergedData} margin={{ top: 20, right: 54, left: 12, bottom: 42 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis
+                  dataKey="chainage"
+                  tickFormatter={formatChainage}
+                  tick={{ fontSize: 11, fill: "#64748b" }}
+                  minTickGap={52}
+                />
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fontSize: 12, fill: "#64748b" }}
+                  allowDecimals={false}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fontSize: 12, fill: "#64748b" }}
+                />
+                <Tooltip
+                  labelFormatter={(label) => `里程：${formatChainage(label)}`}
+                  formatter={(value, name) => [format(value), name]}
+                  contentStyle={styles.tooltip}
+                />
+                <Legend verticalAlign="top" height={36} />
+                <ReferenceLine
+                  yAxisId="left"
+                  y={4}
+                  stroke="#d97706"
+                  strokeDasharray="5 5"
+                  label={{ value: "关注阈值", fill: "#d97706", fontSize: 12 }}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="active_source_count"
+                  stroke="#dc2626"
+                  strokeWidth={3}
+                  dot={false}
+                  name="风险证据源"
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="speed"
+                  stroke="#2563eb"
+                  strokeWidth={2}
+                  strokeDasharray="5 3"
+                  dot={false}
+                  name="掘进速度"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
+function Empty({ text, compact = false }) {
+  return <div style={{ ...styles.empty, minHeight: compact ? 220 : "100%" }}>{text}</div>;
+}
+
+function formatChainage(chainage) {
+  const value = Number(chainage);
+  if (!Number.isFinite(value)) return "--";
+  const km = Math.floor(value / 1000);
+  const m = value % 1000;
+  return `DK${km}+${m.toFixed(1)}`;
+}
+
+function firstNumeric(row, exclude = []) {
+  const found = Object.entries(row || {}).find(
+    ([key, value]) => !exclude.includes(key) && Number.isFinite(Number(value))
+  );
+  return found ? Number(found[1]) : null;
+}
+
+function format(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : "--";
+}
+
 const styles = {
-  wrapper: { 
-    height: "100%", 
-    display: "flex", 
-    flexDirection: "column", 
-    gap: 20, 
-    padding: "20px",
-    backgroundColor: "#f8fafc"
+  wrapper: {
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
   },
-  infoBox: { 
-    background: "#fff", 
-    border: "1px solid #e2e8f0", 
-    borderRadius: 12, 
-    padding: "16px 20px"
+  infoBox: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 14,
   },
-  infoTitle: { fontSize: 16, fontWeight: 700, color: "#0f172a", marginBottom: 4 },
-  infoText: { fontSize: 14, color: "#64748b" },
-  chartCard: { 
-    background: "#fff", 
-    border: "1px solid #e2e8f0", 
-    borderRadius: 16, 
-    padding: "24px",
-    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+  infoTitle: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: 900,
   },
-  chartTitle: { fontSize: 15, fontWeight: 700, color: "#334155", marginBottom: 20, textAlign: "center" },
-  chartInner: { width: "100%", height: 500 }, // 足够的高度确保不被挤压
-  emptyBox: { height: 400, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 15 }
+  infoText: {
+    color: "#64748b",
+    fontSize: 13,
+    lineHeight: 1.7,
+    margin: "6px 0 0",
+  },
+  chartCard: {
+    flex: 1,
+    minHeight: 0,
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+  },
+  chartTitle: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: 900,
+    marginBottom: 10,
+  },
+  chartInner: {
+    flex: 1,
+    minHeight: 290,
+  },
+  tooltip: {
+    borderRadius: 10,
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 14px 30px rgba(15, 23, 42, 0.12)",
+  },
+  empty: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#94a3b8",
+    textAlign: "center",
+  },
 };

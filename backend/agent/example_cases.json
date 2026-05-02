@@ -1,0 +1,33 @@
+[
+  {
+    "id": "TBM-A-01",
+    "query": "列出可用日期",
+    "expected_plan": ["list_dates"],
+    "expected_agents": ["DataAgent"]
+  },
+  {
+    "id": "TBM-A-02",
+    "query": "分析 2023-12-30 的瓦斯超限情况",
+    "expected_plan": ["analyze_gas"],
+    "expected_agents": ["SafetyAgent"]
+  },
+  {
+    "id": "TBM-A-03",
+    "query": "分析 2023-12-30 的地质风险和耦合关系",
+    "expected_plan": ["analyze_geology"],
+    "expected_agents": ["GeologyAgent"]
+  },
+  {
+    "id": "TBM-A-04",
+    "query": "对比 2023-12-30 和历史施工状态趋势",
+    "expected_plan": ["analyze_operation", "compare_history"],
+    "expected_agents": ["OperationAgent", "MemoryAgent"]
+  },
+  {
+    "id": "TBM-A-05",
+    "query": "给我 2023-12-30 的数字孪生状态和前方风险",
+    "expected_plan": ["analyze_forward_risk", "get_digital_twin_state"],
+    "expected_agents": ["GeologyAgent", "TwinAgent"]
+  }
+]
+

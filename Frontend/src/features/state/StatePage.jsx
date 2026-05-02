@@ -1,232 +1,214 @@
 import { useEffect, useState } from "react";
+
 import api from "@/api/client";
-import RockBand from "./RockBand";
+
 export default function StatePage({ date }) {
   const [data, setData] = useState(null);
 
   useEffect(() => {
     if (!date) return;
-
     setData(null);
-
     api
       .get(`/api/tbm/state?date=${date}`)
-      .then((res) => {
-        console.log("state api:", res.data); // ⭐调试用
-        setData(res.data || {});
-      })
+      .then((res) => setData(res.data || {}))
       .catch((err) => {
-        console.error("施工状态加载失败:", err);
+        console.error("施工状态数据加载失败", err);
         setData({});
       });
   }, [date]);
 
-  if (!data) {
-    return <div style={styles.loading}>正在加载施工状态…</div>;
-  }
+  if (!data) return <Empty text="正在加载施工状态数据..." />;
 
   const segments = Array.isArray(data.segments) ? data.segments : [];
   const efficiency = Array.isArray(data.efficiency) ? data.efficiency : [];
-  const stateLabels = data.state_labels || {};
 
   return (
     <div style={styles.wrapper}>
-      {/* ===== 时间轴 ===== */}
-      <div style={styles.section}>
-        <div style={styles.title}>🕒 状态时间轴</div>
+      <section style={styles.section}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <div style={styles.sectionTitle}>状态时间线</div>
+            <div style={styles.sectionSub}>识别到 {segments.length} 个状态片段</div>
+          </div>
+        </div>
 
         {segments.length === 0 ? (
-          <div style={styles.empty}>暂无状态数据</div>
+          <Empty text="暂无施工状态片段" compact />
         ) : (
           <div style={styles.timeline}>
-            {segments.map((s, i) => (
-              <div key={i} style={styles.timelineItem}>
-                <div style={styles.label}>
-                  {s.label_text ||
-                    stateLabels[s.label] ||
-                    `状态 ${s.label}`}
+            {segments.slice(0, 20).map((segment, index) => (
+              <div key={`${segment.start}-${index}`} style={styles.timelineItem}>
+                <span style={styles.stateDot} />
+                <div style={styles.timelineMain}>
+                  <strong>{segment.label_text || `施工状态 ${segment.label}`}</strong>
+                  <span>{segment.start || "--"} 至 {segment.end || "--"}</span>
                 </div>
-
-                <div style={styles.time}>
-                  {safeTime(s.start)} ~ {safeTime(s.end)}
-                </div>
-
-                <div style={styles.duration}>
-                  {formatDuration(s.duration)}
-                </div>
+                <div style={styles.duration}>{duration(segment.duration)}</div>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* ===== 效率统计 ===== */}
-      <div style={styles.section}>
-        <div style={styles.title}>📊 状态效率统计</div>
+      <section style={{ ...styles.section, flex: 1, minHeight: 0 }}>
+        <div style={styles.sectionHeader}>
+          <div>
+            <div style={styles.sectionTitle}>状态效率统计</div>
+            <div style={styles.sectionSub}>按识别状态汇总关键运行指标</div>
+          </div>
+        </div>
 
         {efficiency.length === 0 ? (
-          <div style={styles.empty}>暂无效率数据</div>
+          <Empty text="暂无效率统计数据" compact />
         ) : (
-          <div style={styles.tableContainer}>
+          <div style={styles.tableWrap}>
             <table style={styles.table}>
               <thead>
                 <tr>
                   <th style={styles.th}>状态</th>
-                  <th style={styles.th}>平均推进速度</th>
-                  <th style={styles.th}>平均推力</th>
-                  <th style={styles.th}>平均扭矩</th>
+                  <th style={styles.th}>样本数</th>
+                  <th style={styles.th}>平均值</th>
+                  <th style={styles.th}>最大值</th>
                 </tr>
               </thead>
-
               <tbody>
-                {efficiency.map((row, i) => (
-                  <tr key={i} style={styles.tr}>
-                    <td style={styles.td}>
-                      {row.label_text || "--"}
-                    </td>
-
-                    <td style={styles.td}>
-                      {format(row["平均推进速度"])}
-                    </td>
-
-                    <td style={styles.td}>
-                      {format(row["平均推力"])}
-                    </td>
-
-                    <td style={styles.td}>
-                      {format(row["平均刀盘扭矩"])}
-                    </td>
-                  </tr>
-                ))}
+                {efficiency.slice(0, 12).map((row, index) => {
+                  const values = numericValues(row);
+                  return (
+                    <tr key={`${row.label_text || index}`}>
+                      <td style={styles.td}>{row.label_text || row.label || "--"}</td>
+                      <td style={styles.td}>{row.count ?? row.samples ?? "--"}</td>
+                      <td style={styles.td}>{format(values[0])}</td>
+                      <td style={styles.td}>{format(values[1])}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
 
-/////////////////////// 工具函数 ///////////////////////
+function numericValues(row) {
+  return Object.entries(row || {})
+    .filter(([key, value]) => !["label", "label_text"].includes(key) && Number.isFinite(Number(value)))
+    .map(([, value]) => Number(value));
+}
+
+function duration(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "--";
+  return `${(n / 60).toFixed(1)} 分钟`;
+}
 
 function format(v) {
-  const num = Number(v);
-  if (!isFinite(num)) return "--";
-  return num.toFixed(2);
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : "--";
 }
 
-function formatDuration(v) {
-  const num = Number(v);
-  if (!isFinite(num)) return "--";
-  return (num / 60).toFixed(1) + " min";
+function Empty({ text, compact = false }) {
+  return <div style={{ ...styles.empty, minHeight: compact ? 96 : "100%" }}>{text}</div>;
 }
-
-function safeTime(t) {
-  if (!t) return "--";
-  return t;
-}
-
-/////////////////////// 样式 ///////////////////////
 
 const styles = {
   wrapper: {
+    height: "100%",
     display: "flex",
     flexDirection: "column",
-    gap: 16,
-    height: "100%",
-    padding: "4px",
+    gap: 14,
   },
-
   section: {
-    background: "#f8fafc",
+    background: "#fff",
     border: "1px solid #e2e8f0",
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
   },
-
-  title: {
-    fontSize: 15,
-    fontWeight: 700,
+  sectionHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
     marginBottom: 12,
-    color: "#1e293b",
   },
-
+  sectionTitle: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: 900,
+  },
+  sectionSub: {
+    color: "#64748b",
+    fontSize: 12,
+    marginTop: 3,
+  },
   timeline: {
     display: "flex",
     flexDirection: "column",
     gap: 8,
     maxHeight: 260,
-    overflowY: "auto",
-    paddingRight: "4px",
+    overflow: "auto",
+    paddingRight: 4,
   },
-
   timelineItem: {
-    padding: "10px 12px",
-    borderRadius: 8,
-    background: "#fff",
-    border: "1px solid #e2e8f0",
-    fontSize: 13,
-    display: "flex",
-    justifyContent: "space-between",
+    display: "grid",
+    gridTemplateColumns: "12px 1fr auto",
+    gap: 10,
     alignItems: "center",
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
+    padding: "10px 12px",
+    background: "#f8fafc",
   },
-
-  label: {
-    fontWeight: 600,
+  stateDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    background: "#0f766e",
+    boxShadow: "0 0 0 4px #ccfbf1",
+  },
+  timelineMain: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    minWidth: 0,
     color: "#334155",
-    flex: 1,
+    fontSize: 13,
   },
-
-  time: {
-    color: "#64748b",
-    flex: 2,
-    textAlign: "center",
-  },
-
   duration: {
     color: "#2563eb",
-    fontWeight: 700,
-    flex: 1,
-    textAlign: "right",
+    fontSize: 13,
+    fontWeight: 900,
+    whiteSpace: "nowrap",
   },
-
-  tableContainer: {
-    background: "#fff",
-    borderRadius: 8,
+  tableWrap: {
+    maxHeight: 220,
+    overflow: "auto",
     border: "1px solid #e2e8f0",
-    overflow: "hidden",
+    borderRadius: 10,
   },
-
   table: {
     width: "100%",
     borderCollapse: "collapse",
     fontSize: 13,
   },
-
   th: {
-    background: "#f1f5f9",
-    padding: "12px",
-    textAlign: "left",
+    background: "#f8fafc",
     color: "#475569",
-    fontWeight: 700,
+    textAlign: "left",
+    padding: "10px 12px",
     borderBottom: "1px solid #e2e8f0",
   },
-
   td: {
-    padding: "12px",
     color: "#334155",
+    padding: "10px 12px",
     borderBottom: "1px solid #f1f5f9",
   },
-
   empty: {
-    textAlign: "center",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     color: "#94a3b8",
-    padding: 20,
-  },
-
-  loading: {
     textAlign: "center",
-    color: "#64748b",
-    paddingTop: "40px",
   },
 };

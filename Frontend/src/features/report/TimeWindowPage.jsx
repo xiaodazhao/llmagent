@@ -1,154 +1,213 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+
 import api from "@/api/client";
+
 export default function TimeWindowPage({ date }) {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [report, setReport] = useState("");
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState(""); // 新增：专门用于显示错误信息
+  const [errorMsg, setErrorMsg] = useState("");
 
-  // 🔄 当全局 date 变化时，重置时间窗
   useEffect(() => {
-    if (date) {
-      setStartTime(`${date}T08:00`);
-      setEndTime(`${date}T12:00`);
-      setReport("");
-      setErrorMsg("");
-    }
+    if (!date) return;
+    setStartTime(`${date}T08:00`);
+    setEndTime(`${date}T12:00`);
+    setReport("");
+    setErrorMsg("");
   }, [date]);
 
   const handleGenerate = async () => {
-    // 1. 本地校验
     if (!startTime || !endTime) {
-      setErrorMsg("⚠️ 请完整选择开始和结束时间");
+      setErrorMsg("请选择开始时间和结束时间。");
       return;
     }
     if (startTime >= endTime) {
-      setErrorMsg("⚠️ 结束时间必须晚于开始时间");
+      setErrorMsg("结束时间必须晚于开始时间。");
       return;
     }
 
     setLoading(true);
-    setReport(""); // 清空旧内容
+    setReport("");
     setErrorMsg("");
 
     try {
-      // 2. 发送请求
-      // 后端接受 TimeWindowRequest: { start_time: str, end_time: str }
-      // datetime-local 的格式 (YYYY-MM-DDTHH:mm) 可以直接发给后端
-      // 后端会自动处理 "T" 的替换
-      const res = await api.post("/api/tbm/report_by_time", { 
-        start_time: startTime, 
-        end_time: endTime 
+      const res = await api.post("/api/tbm/report_by_time", {
+        start_time: startTime,
+        end_time: endTime,
       });
-
-      // 3. 处理响应
-      if (res.data.report && !res.data.report.startsWith("❌")) {
-        setReport(res.data.report);
+      const nextReport = res.data.report || "";
+      if (nextReport.startsWith("错误") || nextReport.startsWith("❌")) {
+        setErrorMsg(nextReport);
       } else {
-        // 如果后端返回了包含错误符号的字符串
-        setErrorMsg(res.data.report || "生成失败，未返回有效报告");
+        setReport(nextReport);
       }
-    } catch (e) {
-      console.error(e);
-      setErrorMsg("❌ 网络请求出错或服务器异常");
+    } catch (err) {
+      console.error("时间段报告生成失败", err);
+      setErrorMsg("时间段报告生成失败，请检查后端服务。");
     } finally {
       setLoading(false);
     }
   };
 
-  // 如果没有选择日期，显示提示
   if (!date) {
-    return <div style={{ padding: 20, color: '#64748b' }}>请先在左侧选择具体日期</div>;
+    return <div style={styles.empty}>请先选择数据日期。</div>;
   }
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <div style={{ marginBottom: 20 }}>
-         <h2 style={{ fontSize: "18px", color: "#1e293b", display: 'flex', alignItems: 'center', gap: '8px' }}>
-           ⏱️ 时段分析 <span style={{fontSize: '14px', fontWeight: 'normal', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px'}}>{date}</span>
-         </h2>
+    <div style={styles.wrapper}>
+      <div style={styles.toolbar}>
+        <div>
+          <div style={styles.title}>时间段智能分析</div>
+          <div style={styles.sub}>日期：{date}</div>
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: 20, background: "#f8fafc", padding: 15, borderRadius: 8, alignItems: 'flex-end' }}>
-        <div style={{ flex: 1 }}>
-            <label style={{display:'block', fontSize: 12, color: '#64748b', marginBottom: 4}}>开始时间</label>
-            <input 
-              type="datetime-local" 
-              value={startTime} 
-              // 关键修复：限制只能选当天，防止后端读错文件
-              min={`${date}T00:00`}
-              max={`${date}T23:59`}
-              onChange={e => setStartTime(e.target.value)} 
-              style={styles.input} 
-            />
-        </div>
-        <div style={{ flex: 1 }}>
-            <label style={{display:'block', fontSize: 12, color: '#64748b', marginBottom: 4}}>结束时间</label>
-            <input 
-              type="datetime-local" 
-              value={endTime} 
-              // 关键修复：限制只能选当天
-              min={`${date}T00:00`}
-              max={`${date}T23:59`}
-              onChange={e => setEndTime(e.target.value)} 
-              style={styles.input} 
-            />
-        </div>
-        <button 
-            onClick={handleGenerate} 
-            disabled={loading} 
-            style={{...styles.btn, opacity: loading ? 0.7 : 1}}
+      <div style={styles.form}>
+        <Field label="开始时间" value={startTime} onChange={setStartTime} date={date} />
+        <Field label="结束时间" value={endTime} onChange={setEndTime} date={date} />
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={loading}
+          style={{ ...styles.primaryButton, opacity: loading ? 0.65 : 1 }}
         >
-            {loading ? "分析中..." : "生成报告"}
+          {loading ? "分析中..." : "生成报告"}
         </button>
       </div>
 
-      {/* 错误提示区域 */}
-      {errorMsg && (
-        <div style={{ marginBottom: 20, padding: "10px", background: "#fee2e2", color: "#b91c1c", borderRadius: 8, fontSize: "14px" }}>
-          {errorMsg}
-        </div>
-      )}
+      {errorMsg && <div style={styles.error}>{errorMsg}</div>}
 
-      <div style={{ flex: 1, overflowY: "auto", border: "1px dashed #cbd5e1", borderRadius: 8, padding: 20, background: '#fff' }}>
+      <div style={styles.reportBox}>
         {loading ? (
-           <div style={{textAlign: 'center', color: '#94a3b8', marginTop: 50}}>
-             ⏳ 正在分析数据并生成 AI 报告，请稍候...
-           </div>
+          <Empty title="正在分析时间段" text="系统正在截取所选时间段并生成报告。" />
         ) : report ? (
-           <div className="markdown-body">
-             <ReactMarkdown>{report}</ReactMarkdown>
-           </div>
+          <div className="markdown-body" style={styles.markdown}>
+            <ReactMarkdown>{report}</ReactMarkdown>
+          </div>
         ) : (
-           <div style={{color:'#94a3b8', textAlign:'center', marginTop: 50}}>
-             请选择具体时间段并点击“生成报告”
-           </div>
+          <Empty title="尚未生成时间段报告" text="选择具体起止时间后，点击生成报告。" />
         )}
       </div>
     </div>
   );
 }
 
+function Field({ label, value, onChange, date }) {
+  return (
+    <label style={styles.field}>
+      <span>{label}</span>
+      <input
+        type="datetime-local"
+        value={value}
+        min={`${date}T00:00`}
+        max={`${date}T23:59`}
+        onChange={(e) => onChange(e.target.value)}
+        style={styles.input}
+      />
+    </label>
+  );
+}
+
+function Empty({ title, text }) {
+  return (
+    <div style={styles.empty}>
+      <strong>{title}</strong>
+      <span>{text}</span>
+    </div>
+  );
+}
+
 const styles = {
-    input: { 
-      width: "100%", 
-      padding: "8px", 
-      border: "1px solid #cbd5e1", 
-      borderRadius: 4, 
-      fontFamily: 'inherit',
-      color: '#334155'
-    },
-    btn: { 
-      background: "#10b981", 
-      color: "#fff", 
-      border: "none", 
-      padding: "0 20px", 
-      height: "38px", // 对齐输入框高度
-      borderRadius: 4, 
-      cursor: "pointer", 
-      fontWeight: "bold",
-      minWidth: "100px"
-    }
+  wrapper: {
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
+  },
+  toolbar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  title: {
+    color: "#0f172a",
+    fontSize: 17,
+    fontWeight: 900,
+  },
+  sub: {
+    color: "#64748b",
+    fontSize: 13,
+    marginTop: 4,
+  },
+  form: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr auto",
+    gap: 10,
+    alignItems: "end",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+  },
+  field: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  input: {
+    width: "100%",
+    border: "1px solid #cbd5e1",
+    borderRadius: 9,
+    padding: "9px 10px",
+    color: "#334155",
+    background: "#fff",
+    outline: "none",
+  },
+  primaryButton: {
+    border: "none",
+    borderRadius: 9,
+    background: "#2563eb",
+    color: "#fff",
+    padding: "10px 14px",
+    fontWeight: 900,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  error: {
+    border: "1px solid #fecaca",
+    background: "#fef2f2",
+    color: "#b91c1c",
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 13,
+  },
+  reportBox: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "auto",
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 18,
+  },
+  markdown: {
+    color: "#334155",
+    lineHeight: 1.75,
+  },
+  empty: {
+    height: "100%",
+    minHeight: 320,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    color: "#94a3b8",
+    textAlign: "center",
+  },
 };

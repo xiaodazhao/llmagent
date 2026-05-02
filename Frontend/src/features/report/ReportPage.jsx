@@ -1,12 +1,13 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+
 import api from "@/api/client";
+
 export default function ReportPage({ date }) {
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState("");
   const [error, setError] = useState("");
 
-  // 日期变化时清空旧内容
   useEffect(() => {
     setReport("");
     setError("");
@@ -14,165 +15,165 @@ export default function ReportPage({ date }) {
 
   const handleGenerate = async () => {
     if (!date) return;
-
     setLoading(true);
     setReport("");
     setError("");
 
     try {
       const res = await api.post("/api/tbm/report", { date });
-      setReport(res.data.report);
+      setReport(res.data.report || "");
     } catch (err) {
-      console.error(err);
-      setError("❌ 生成失败，请检查后端服务或稍后再试。");
+      console.error("日报生成失败", err);
+      setError("日报生成失败，请检查后端服务或 LLM 配置。");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      {/* ===== 顶部 ===== */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 20,
-        }}
-      >
-        <h2 style={{ margin: 0, fontSize: 18, color: "#1e293b" }}>
-          📝 智能日报 ({date})
-        </h2>
-
+    <div style={styles.wrapper}>
+      <div style={styles.toolbar}>
+        <div>
+          <div style={styles.title}>工程智能日报</div>
+          <div style={styles.sub}>日期：{date || "--"}</div>
+        </div>
         <button
+          type="button"
           onClick={handleGenerate}
           disabled={loading || !date}
-          style={{
-            ...styles.btn,
-            opacity: loading || !date ? 0.6 : 1,
-            cursor: loading || !date ? "not-allowed" : "pointer",
-          }}
+          style={{ ...styles.primaryButton, opacity: loading || !date ? 0.6 : 1 }}
         >
-          {loading ? "正在分析..." : "生成日报"}
+          {loading ? "生成中..." : "生成日报"}
         </button>
       </div>
 
-      {/* ===== 报告展示区 ===== */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          background: "#f8fafc",
-          padding: 20,
-          borderRadius: 8,
-          border: "1px solid #e2e8f0",
-        }}
-      >
-        {error && (
-          <div
-            style={{
-              color: "#ef4444",
-              background: "#fee2e2",
-              padding: 10,
-              borderRadius: 6,
-              marginBottom: 10,
-            }}
-          >
-            {error}
-          </div>
-        )}
+      {error && <div style={styles.error}>{error}</div>}
 
-        {report ? (
-          <div
-            className="markdown-body"
-            style={{
-              lineHeight: 1.6,
-              color: "#334155",
-              whiteSpace: "normal",     // ⭐ 关键：防止表格被 pre-wrap 搞乱
-              wordBreak: "break-word",
-            }}
-          >
-            <ReactMarkdown
-              components={{
-                table: ({ children, ...props }) => (
-                  <div style={{ width: "100%", overflowX: "auto" }}>
-                    <table
-                      {...props}
-                      style={{
-                        width: "100%",
-                        borderCollapse: "collapse",
-                        tableLayout: "auto",
-                        margin: "8px 0",
-                      }}
-                    >
-                      {children}
-                    </table>
-                  </div>
-                ),
-                th: ({ children, ...props }) => (
-                  <th
-                    {...props}
-                    style={{
-                      border: "1px solid #e2e8f0",
-                      background: "#f1f5f9",
-                      padding: "8px 10px",
-                      textAlign: "left",
-                      fontWeight: 600,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {children}
-                  </th>
-                ),
-                td: ({ children, ...props }) => (
-                  <td
-                    {...props}
-                    style={{
-                      border: "1px solid #e2e8f0",
-                      padding: "8px 10px",
-                      verticalAlign: "top",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {children}
-                  </td>
-                ),
-              }}
-            >
-              {report}
-            </ReactMarkdown>
+      <div style={styles.reportBox}>
+        {loading ? (
+          <Empty title="正在生成日报" text="系统正在汇总工况、地质、气体与风险信息。" />
+        ) : report ? (
+          <div className="markdown-body" style={styles.markdown}>
+            <ReactMarkdown components={markdownComponents}>{report}</ReactMarkdown>
           </div>
         ) : (
-          !loading && (
-            <div
-              style={{
-                color: "#94a3b8",
-                textAlign: "center",
-                marginTop: 50,
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-              }}
-            >
-              <span style={{ fontSize: 24 }}>🤖</span>
-              <span>点击上方按钮，AI 将为您生成 {date} 的工程日报</span>
-            </div>
-          )
+          <Empty title="尚未生成日报" text={`点击右上角按钮，生成 ${date || "当前日期"} 的工程日报。`} />
         )}
       </div>
     </div>
   );
 }
 
+function Empty({ title, text }) {
+  return (
+    <div style={styles.empty}>
+      <strong>{title}</strong>
+      <span>{text}</span>
+    </div>
+  );
+}
+
+const markdownComponents = {
+  table: ({ children, ...props }) => (
+    <div style={{ width: "100%", overflowX: "auto" }}>
+      <table {...props} style={styles.mdTable}>
+        {children}
+      </table>
+    </div>
+  ),
+  th: ({ children, ...props }) => (
+    <th {...props} style={styles.mdTh}>
+      {children}
+    </th>
+  ),
+  td: ({ children, ...props }) => (
+    <td {...props} style={styles.mdTd}>
+      {children}
+    </td>
+  ),
+};
+
 const styles = {
-  btn: {
-    background: "#3b82f6",
-    color: "#fff",
+  wrapper: {
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
+  },
+  toolbar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 14,
+  },
+  title: {
+    color: "#0f172a",
+    fontSize: 17,
+    fontWeight: 900,
+  },
+  sub: {
+    color: "#64748b",
+    fontSize: 13,
+    marginTop: 4,
+  },
+  primaryButton: {
     border: "none",
-    padding: "8px 16px",
-    borderRadius: 6,
-    transition: "0.2s",
+    borderRadius: 10,
+    background: "#0f766e",
+    color: "#fff",
+    padding: "10px 14px",
+    fontWeight: 900,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+  error: {
+    border: "1px solid #fecaca",
+    background: "#fef2f2",
+    color: "#b91c1c",
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 13,
+  },
+  reportBox: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "auto",
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: 12,
+    padding: 18,
+  },
+  markdown: {
+    color: "#334155",
+    lineHeight: 1.75,
+    wordBreak: "break-word",
+  },
+  empty: {
+    height: "100%",
+    minHeight: 360,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    color: "#94a3b8",
+    textAlign: "center",
+  },
+  mdTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+    margin: "10px 0",
+  },
+  mdTh: {
+    border: "1px solid #e2e8f0",
+    background: "#f8fafc",
+    padding: "8px 10px",
+    textAlign: "left",
+    whiteSpace: "nowrap",
+  },
+  mdTd: {
+    border: "1px solid #e2e8f0",
+    padding: "8px 10px",
+    verticalAlign: "top",
   },
 };
-// Below is partial code of c:\Users\22923\Desktop\LLM_20251219(1)\LLM_20251219\Frontend\node_modules\csstype\index.d.ts:
