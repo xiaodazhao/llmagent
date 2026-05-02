@@ -21,7 +21,9 @@ if load_dotenv is not None:
     load_dotenv(PROJECT_ROOT / ".env")
     load_dotenv(BACKEND_DIR / ".env")
 
-DEFAULT_PROVIDER = os.getenv("LLM_PROVIDER", "google").strip().lower()
+# Default to DeepSeek. Gemini remains available by setting LLM_PROVIDER=google
+# or LLM_PROVIDER=gemini after the Google API key is renewed.
+DEFAULT_PROVIDER = os.getenv("LLM_PROVIDER", "deepseek").strip().lower()
 DEFAULT_GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "gemini-2.5-flash-lite")
 DEFAULT_DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")

@@ -17,7 +17,8 @@ from analysis.coupling_analysis import (
     add_risk_response_coupling,
     summarize_coupling,
 )
-from config import EVIDENCE_DB_PATH
+from analysis.geology_response_coupling import run_coupling_analysis
+from config import EVIDENCE_DB_PATH, RESULT_DIR
 from geology.geology_fusion_backend import attach_geology_labels, load_evidence_db
 from geology.geology_summary import (
     summarize_geology_record_level,
@@ -191,6 +192,10 @@ def risk_probability_to_text(df_geo):
 # 核心分析引擎
 # =========================
 def analyze_tbm_data(df: pd.DataFrame):
+    coupling_validation = {}
+    coupling_output_paths = {}
+    high_attention_segments = []
+
     # ===== 0. 地质融合 =====
     try:
         evidence_df = load_evidence_db(EVIDENCE_DB_PATH)
@@ -198,8 +203,25 @@ def analyze_tbm_data(df: pd.DataFrame):
 
         geo_summary_record = summarize_geology_record_level(df_geo)
         segment_df = run_segment_analysis(df_geo, segment_length=10)
-        segment_df = add_risk_response_coupling(segment_df)
-        coupling_summary = summarize_coupling(segment_df)
+        coupling_analysis_result = run_coupling_analysis(
+            df_geo=df_geo,
+            segment_length=10,
+            base_segment_df=segment_df,
+            output_dir=RESULT_DIR / "geology_response_coupling",
+            top_k=10,
+        )
+        if coupling_analysis_result.get("summary", {}).get("has_coupling"):
+            segment_df = coupling_analysis_result["segment_df"]
+            coupling_summary = coupling_analysis_result["summary"]
+            coupling_validation = coupling_analysis_result.get("validation", {})
+            coupling_output_paths = coupling_analysis_result.get("output_paths", {})
+            high_attention_segments = coupling_analysis_result.get("high_attention_segments", [])
+        else:
+            segment_df = add_risk_response_coupling(segment_df)
+            coupling_summary = summarize_coupling(segment_df)
+            coupling_validation = {}
+            coupling_output_paths = {}
+            high_attention_segments = coupling_summary.get("top_segments", [])
         typical_segments_df = build_typical_segments_table(segment_df, top_n=20)
         geo_summary_segment = summarize_geology_segment_level(segment_df)
         geo_text = geology_summary_to_text(geo_summary_segment)
@@ -341,6 +363,8 @@ def analyze_tbm_data(df: pd.DataFrame):
         coupling_summary=coupling_summary,
     )
     llm_summary["区段风险-施工响应耦合分析"] = coupling_summary
+    llm_summary["耦合分析弱标签验证"] = coupling_validation
+    llm_summary["耦合分析高关注区段"] = high_attention_segments
     llm_summary["数字孪生状态"] = digital_twin_state
 
     return {
@@ -368,6 +392,9 @@ def analyze_tbm_data(df: pd.DataFrame):
         "forward_risk_summary": forward_risk_summary,
         "forward_risk_text": forward_risk_text,
         "coupling_summary": coupling_summary,
+        "coupling_validation": coupling_validation,
+        "coupling_output_paths": coupling_output_paths,
+        "high_attention_segments": high_attention_segments,
         "digital_twin_state": digital_twin_state,
         "llm_summary": llm_summary,
         "face_geo_text": face_geo_text,

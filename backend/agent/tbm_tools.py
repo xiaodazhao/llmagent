@@ -139,6 +139,11 @@ class TBMTools:
                 "record_summary": serialize_for_json(result.get("geo_summary_record", {})),
                 "segment_summary": serialize_for_json(result.get("geo_summary_segment", {})),
                 "coupling_summary": serialize_for_json(result.get("coupling_summary", {})),
+                "coupling_validation": serialize_for_json(result.get("coupling_validation", {})),
+                "coupling_output_paths": serialize_for_json(result.get("coupling_output_paths", {})),
+                "high_attention_segments": serialize_for_json(
+                    result.get("high_attention_segments", [])
+                ),
                 "top_segments": serialize_for_json(
                     typical_df.head(10).to_dict(orient="records")
                     if not typical_df.empty

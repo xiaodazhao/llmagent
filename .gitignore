@@ -6,6 +6,7 @@ tempCodeRunnerFile.py
 # frontend
 Frontend/node_modules/
 Frontend/dist/
+Frontend/*.log
 
 # 通用
 .env

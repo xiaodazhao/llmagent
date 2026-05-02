@@ -4,6 +4,7 @@ from typing import Optional
 import pandas as pd
 from fastapi import APIRouter, FastAPI
 
+from agent.supervisor_agent import TBMSupervisorAgent
 from agent.tbm_agent import TBMAgent
 from llm.llm_api import call_llm
 from llm.prompt_builder import build_prompt
@@ -32,6 +33,11 @@ def register_tbm_routes(
         build_risk_profile=build_risk_profile,
         build_speed_profile=build_speed_profile,
     )
+    tbm_supervisor_agent = TBMSupervisorAgent(
+        analyze_tbm_data=analyze_tbm_data,
+        build_risk_profile=build_risk_profile,
+        build_speed_profile=build_speed_profile,
+    )
 
     @router.get("/dates")
     def get_available_dates():
@@ -56,6 +62,19 @@ def register_tbm_routes(
     @router.get("/agent/capabilities")
     def tbm_agent_capabilities():
         return tbm_agent.capabilities()
+
+    @router.post("/agent_v2")
+    def run_tbm_supervisor_agent(req: AgentRequest):
+        return tbm_supervisor_agent.run(
+            query=req.query,
+            date=req.date,
+            use_llm=req.use_llm,
+            verbose=req.verbose,
+        )
+
+    @router.get("/agent_v2/capabilities")
+    def tbm_supervisor_agent_capabilities():
+        return tbm_supervisor_agent.capabilities()
 
     @router.post("/report")
     def generate_daily_report(req: DailyReportRequest):
@@ -192,6 +211,38 @@ def register_tbm_routes(
                 "segment",
                 "segment_start_first",
                 "segment_end_first",
+                "GRS",
+                "geo_risk_score",
+                "GRS_base",
+                "GRS_corrected",
+                "GRS_smooth",
+                "GRS_final",
+                "correction",
+                "correction_factor",
+                "GRS_mean",
+                "GRS_max",
+                "RAI",
+                "response_anomaly_index",
+                "stop_anomaly",
+                "efficiency_anomaly",
+                "param_anomaly",
+                "anomaly_type",
+                "anomaly_type_score",
+                "GRCI",
+                "coupling_index",
+                "coupling_class",
+                "coupling_type",
+                "delta_RAI",
+                "delta_GRS",
+                "grci_class_code",
+                "grci_class_label",
+                "sync_coupling",
+                "lag_coupling",
+                "lag_response",
+                "response_change_coupling",
+                "response_consistency",
+                "weak_anomaly_label",
+                "weak_anomaly_reasons",
                 "risk_mode",
                 "risk_score_max",
                 "active_source_count_max",
@@ -236,6 +287,9 @@ def register_tbm_routes(
                     typical_df.to_dict(orient="records") if not typical_df.empty else []
                 ),
                 "coupling_summary": serialize_for_json(result.get("coupling_summary", {})),
+                "coupling_validation": serialize_for_json(result.get("coupling_validation", {})),
+                "coupling_output_paths": serialize_for_json(result.get("coupling_output_paths", {})),
+                "high_attention_segments": serialize_for_json(result.get("high_attention_segments", [])),
                 "digital_twin_state": serialize_for_json(result.get("digital_twin_state", {})),
             }
 
@@ -249,6 +303,10 @@ def register_tbm_routes(
                 },
                 "segment_table": [],
                 "typical_segments": [],
+                "coupling_summary": {},
+                "coupling_validation": {},
+                "coupling_output_paths": {},
+                "high_attention_segments": [],
             }
 
     @router.get("/digital_twin_state")
