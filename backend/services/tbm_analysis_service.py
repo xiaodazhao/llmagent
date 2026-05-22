@@ -191,17 +191,11 @@ def risk_probability_to_text(df_geo):
 # =========================
 # 核心分析引擎
 # =========================
-def analyze_tbm_data(df: pd.DataFrame):
-    coupling_validation = {}
-    coupling_output_paths = {}
-    high_attention_segments = []
-
-    # ===== 0. 地质融合 =====
+def _run_geology_analysis(df: pd.DataFrame) -> dict:
     try:
         evidence_df = load_evidence_db(EVIDENCE_DB_PATH)
         df_geo = attach_geology_labels(df, evidence_df)
 
-        geo_summary_record = summarize_geology_record_level(df_geo)
         segment_df = run_segment_analysis(df_geo, segment_length=10)
         coupling_analysis_result = run_coupling_analysis(
             df_geo=df_geo,
@@ -210,6 +204,7 @@ def analyze_tbm_data(df: pd.DataFrame):
             output_dir=RESULT_DIR / "geology_response_coupling",
             top_k=10,
         )
+
         if coupling_analysis_result.get("summary", {}).get("has_coupling"):
             segment_df = coupling_analysis_result["segment_df"]
             coupling_summary = coupling_analysis_result["summary"]
@@ -222,123 +217,181 @@ def analyze_tbm_data(df: pd.DataFrame):
             coupling_validation = {}
             coupling_output_paths = {}
             high_attention_segments = coupling_summary.get("top_segments", [])
-        typical_segments_df = build_typical_segments_table(segment_df, top_n=20)
+
+        geo_summary_record = summarize_geology_record_level(df_geo)
         geo_summary_segment = summarize_geology_segment_level(segment_df)
-        geo_text = geology_summary_to_text(geo_summary_segment)
-        face_geo_text = build_face_geo_text(evidence_df)
+        typical_segments_df = build_typical_segments_table(segment_df, top_n=20)
         forward_risk_summary = generate_forward_risk_summary(
             df_plc=df_geo,
             evidence_df=evidence_df,
-            lookahead_m=30
+            lookahead_m=30,
         )
-        forward_risk_text = forward_risk_to_text(forward_risk_summary)
 
-    except Exception as e:
-        print(f"[Geology Error] {e}")
-        df_geo = df.copy()
-        segment_df = pd.DataFrame()
-        typical_segments_df = pd.DataFrame()
-        coupling_summary = {
-            "has_coupling": False,
-            "level_counts": {},
-            "top_segments": [],
-            "summary_text": "区段风险-施工响应耦合分析不可用。"
+        return {
+            "df_geo": df_geo,
+            "segment_df": segment_df,
+            "typical_segments_df": typical_segments_df,
+            "geo_summary_record": geo_summary_record,
+            "geo_summary_segment": geo_summary_segment,
+            "geo_text": geology_summary_to_text(geo_summary_segment),
+            "face_geo_text": build_face_geo_text(evidence_df),
+            "forward_risk_summary": forward_risk_summary,
+            "forward_risk_text": forward_risk_to_text(forward_risk_summary),
+            "coupling_summary": coupling_summary,
+            "coupling_validation": coupling_validation,
+            "coupling_output_paths": coupling_output_paths,
+            "high_attention_segments": high_attention_segments,
+            "warnings": [],
         }
-        geo_summary_record = {"has_geology": False, "summary_text": "地质融合分析不可用。"}
-        geo_summary_segment = {"has_geology": False, "summary_text": "地质融合分析不可用。"}
-        geo_text = "地质融合分析不可用。"
-        forward_risk_summary = {"has_forward_risk": False}
-        forward_risk_text = "前方风险提示不可用。"
+    except Exception as exc:
+        print(f"[Geology Error] {exc}")
+        return {
+            "df_geo": df.copy(),
+            "segment_df": pd.DataFrame(),
+            "typical_segments_df": pd.DataFrame(),
+            "geo_summary_record": {"has_geology": False, "summary_text": "地质融合分析不可用。"},
+            "geo_summary_segment": {"has_geology": False, "summary_text": "地质融合分析不可用。"},
+            "geo_text": "地质融合分析不可用。",
+            "face_geo_text": "掌子面地质摘要不可用。",
+            "forward_risk_summary": {"has_forward_risk": False},
+            "forward_risk_text": "前方风险提示不可用。",
+            "coupling_summary": {
+                "has_coupling": False,
+                "level_counts": {},
+                "top_segments": [],
+                "summary_text": "区段风险-施工响应耦合分析不可用。",
+            },
+            "coupling_validation": {},
+            "coupling_output_paths": {},
+            "high_attention_segments": [],
+            "warnings": [f"地质融合分析已降级：{exc}"],
+        }
 
-    # ===== 1. 基础工况分析 =====
+
+def _run_operation_analysis(df_geo: pd.DataFrame) -> dict:
     segments = load_and_process(df_geo)
-    seg_text = segments_to_text(segments)
     stats = compute_stats(segments)
-    stats_text = stats_to_text(stats)
+    return {
+        "segments": segments,
+        "seg_text": segments_to_text(segments),
+        "stats": stats,
+        "stats_text": stats_to_text(stats),
+    }
 
-    # ===== 2. 自适应施工状态识别 =====
+
+def _run_state_analysis(df_geo: pd.DataFrame) -> dict:
     n_valid = estimate_valid_samples(df_geo, STATE_FEATURES)
     state_cfg = choose_state_params(n_valid)
 
-    state_labels = {}
-    state_segments = {}
-    state_text = "当日有效工作样本过少，未进行隐含施工状态识别。"
-    eff_df = pd.DataFrame()
-    eff_text = "当日有效工作样本过少，无法计算施工状态效率统计。"
-    state_stats = {}
-    state_stats_text = "当日有效工作样本过少，无施工状态统计结果。"
-    df_state = df_geo.copy()
+    result = {
+        "df_state": df_geo.copy(),
+        "state_labels": {},
+        "state_segments": {},
+        "state_text": "当日有效工作样本过少，未进行隐含施工状态识别。",
+        "eff_df": pd.DataFrame(),
+        "eff_text": "当日有效工作样本过少，无法计算施工状态效率统计。",
+        "state_stats": {},
+        "state_stats_text": "当日有效工作样本过少，无施工状态统计结果。",
+        "n_valid": n_valid,
+        "state_cfg": state_cfg,
+        "warnings": [],
+    }
 
-    if state_cfg["do_cluster"]:
-        try:
-            df_state, _ = detect_excavation_state(
-                df_geo.copy(),
-                features=STATE_FEATURES,
-                n_states=state_cfg["n_states"]
-            )
+    if not state_cfg["do_cluster"]:
+        return result
 
-            state_labels = explain_excavation_states(df_state)
+    try:
+        df_state, _ = detect_excavation_state(
+            df_geo.copy(),
+            features=STATE_FEATURES,
+            n_states=state_cfg["n_states"],
+        )
+        state_labels = explain_excavation_states(df_state)
+        state_segments = excavation_state_segments(
+            df_state,
+            min_duration_sec=state_cfg["min_duration_sec"],
+        )
+        state_text = excavation_state_to_text(state_segments, state_labels)
+        raw_eff_df = excavation_state_efficiency(df_state)
 
-            # 原始 state_id 分段结果
-            state_segments = excavation_state_segments(
-                df_state,
-                min_duration_sec=state_cfg["min_duration_sec"]
-            )
-            state_text = excavation_state_to_text(state_segments, state_labels)
+        if not raw_eff_df.empty:
+            eff_df = raw_eff_df.reset_index().rename(columns={"state_id": "label"})
+            eff_df["label_text"] = eff_df["label"].map(state_labels).fillna("未知状态")
 
-            # 原始效率统计（按 state_id）
-            raw_eff_df = excavation_state_efficiency(df_state)
+            agg_dict = {}
+            for col in ["平均推进速度", "平均推力", "平均刀盘扭矩", "平均刀盘实际转速", "平均推进给定速度"]:
+                if col in eff_df.columns:
+                    agg_dict[col] = "mean"
 
-            # 语义聚合后的效率表
-            if not raw_eff_df.empty:
-                eff_df = raw_eff_df.reset_index().rename(columns={"state_id": "label"})
-                eff_df["label_text"] = eff_df["label"].map(state_labels).fillna("未知状态")
-
-                agg_dict = {}
-                for col in ["平均推进速度", "平均推力", "平均刀盘扭矩", "平均刀盘实际转速", "平均推进给定速度"]:
-                    if col in eff_df.columns:
-                        agg_dict[col] = "mean"
-
-                if agg_dict:
-                    eff_df = (
-                        eff_df
-                        .groupby("label_text", as_index=False)
-                        .agg(agg_dict)
-                    )
-                else:
-                    eff_df = pd.DataFrame()
-
-                eff_text = semantic_efficiency_to_text(eff_df)
+            if agg_dict:
+                eff_df = eff_df.groupby("label_text", as_index=False).agg(agg_dict)
             else:
                 eff_df = pd.DataFrame()
-                eff_text = "数据量不足，无法计算施工状态效率统计。"
-
-            # 状态统计仍按原始 state_id
-            state_stats = excavation_state_stats(df_state, state_segments)
-            state_stats_text = excavation_state_stats_to_text(state_stats, state_labels)
-
-        except Exception as e:
-            print(f"[State Error] {e}")
-            df_state = df_geo.copy()
-            state_labels = {}
-            state_segments = {}
-            state_text = "施工状态分析不可用。"
+        else:
             eff_df = pd.DataFrame()
-            eff_text = "施工效率分析不可用。"
-            state_stats = {}
-            state_stats_text = "施工状态统计不可用。"
 
-    # ===== 3. 气体分析 =====
+        result.update({
+            "df_state": df_state,
+            "state_labels": state_labels,
+            "state_segments": state_segments,
+            "state_text": state_text,
+            "eff_df": eff_df,
+            "eff_text": semantic_efficiency_to_text(eff_df),
+            "state_stats": excavation_state_stats(df_state, state_segments),
+        })
+        result["state_stats_text"] = excavation_state_stats_to_text(
+            result["state_stats"],
+            state_labels,
+        )
+        return result
+    except Exception as exc:
+        print(f"[State Error] {exc}")
+        result.update({
+            "state_text": "施工状态分析不可用。",
+            "eff_text": "施工效率分析不可用。",
+            "state_stats_text": "施工状态统计不可用。",
+            "warnings": [f"施工状态分析已降级：{exc}"],
+        })
+        return result
+
+
+def _run_gas_analysis(df_geo: pd.DataFrame, df_state: pd.DataFrame) -> dict:
     try:
         gas_stats = compute_gas_stats(df_geo, df_state=df_state)
-        gas_text = gas_stats_to_text(gas_stats)
-    except Exception as e:
-        print(f"[Gas Error] {e}")
-        gas_stats = {}
-        gas_text = "无气体监测数据。"
+        return {
+            "gas_stats": gas_stats,
+            "gas_text": gas_stats_to_text(gas_stats),
+            "warnings": [],
+        }
+    except Exception as exc:
+        print(f"[Gas Error] {exc}")
+        return {
+            "gas_stats": {},
+            "gas_text": "无气体监测数据。",
+            "warnings": [f"气体分析已降级：{exc}"],
+        }
 
-    # ===== 4. LLM 结构化摘要 =====
-    llm_summary = {
+
+def _build_llm_summary(
+    *,
+    stats: dict,
+    state_labels: dict,
+    state_stats: dict,
+    eff_df: pd.DataFrame,
+    gas_stats: dict,
+    geo_summary_record: dict,
+    geo_summary_segment: dict,
+    typical_segments_df: pd.DataFrame,
+    forward_risk_summary: dict,
+    forward_risk_text: str,
+    n_valid: int,
+    state_cfg: dict,
+    coupling_summary: dict,
+    coupling_validation: dict,
+    high_attention_segments: list,
+    digital_twin_state: dict,
+) -> dict:
+    return {
         "基础工况统计": stats,
         "施工状态标签": state_labels,
         "施工状态统计": state_stats,
@@ -350,55 +403,88 @@ def analyze_tbm_data(df: pd.DataFrame):
         "前方风险提示摘要": forward_risk_summary,
         "前方风险提示文本": forward_risk_text,
         "有效状态样本数": n_valid,
-        "状态识别配置": state_cfg
+        "状态识别配置": state_cfg,
+        "区段风险-施工响应耦合分析": coupling_summary,
+        "耦合分析弱标签验证": coupling_validation,
+        "耦合分析高关注区段": high_attention_segments,
+        "数字孪生状态": digital_twin_state,
     }
-    risk_prob_text = risk_probability_to_text(df_geo)
+
+
+def analyze_tbm_data(df: pd.DataFrame):
+    geology_result = _run_geology_analysis(df)
+    operation_result = _run_operation_analysis(geology_result["df_geo"])
+    state_result = _run_state_analysis(geology_result["df_geo"])
+    gas_result = _run_gas_analysis(geology_result["df_geo"], state_result["df_state"])
+
+    warnings = [
+        *geology_result.get("warnings", []),
+        *state_result.get("warnings", []),
+        *gas_result.get("warnings", []),
+    ]
+
+    risk_prob_text = risk_probability_to_text(geology_result["df_geo"])
     digital_twin_state = build_digital_twin_state(
-        df_geo=df_geo,
-        stats=stats,
-        state_stats=state_stats,
-        gas_stats=gas_stats,
-        geo_summary_segment=geo_summary_segment,
-        forward_risk_summary=forward_risk_summary,
-        coupling_summary=coupling_summary,
+        df_geo=geology_result["df_geo"],
+        stats=operation_result["stats"],
+        state_stats=state_result["state_stats"],
+        gas_stats=gas_result["gas_stats"],
+        geo_summary_segment=geology_result["geo_summary_segment"],
+        forward_risk_summary=geology_result["forward_risk_summary"],
+        coupling_summary=geology_result["coupling_summary"],
     )
-    llm_summary["区段风险-施工响应耦合分析"] = coupling_summary
-    llm_summary["耦合分析弱标签验证"] = coupling_validation
-    llm_summary["耦合分析高关注区段"] = high_attention_segments
-    llm_summary["数字孪生状态"] = digital_twin_state
+    llm_summary = _build_llm_summary(
+        stats=operation_result["stats"],
+        state_labels=state_result["state_labels"],
+        state_stats=state_result["state_stats"],
+        eff_df=state_result["eff_df"],
+        gas_stats=gas_result["gas_stats"],
+        geo_summary_record=geology_result["geo_summary_record"],
+        geo_summary_segment=geology_result["geo_summary_segment"],
+        typical_segments_df=geology_result["typical_segments_df"],
+        forward_risk_summary=geology_result["forward_risk_summary"],
+        forward_risk_text=geology_result["forward_risk_text"],
+        n_valid=state_result["n_valid"],
+        state_cfg=state_result["state_cfg"],
+        coupling_summary=geology_result["coupling_summary"],
+        coupling_validation=geology_result["coupling_validation"],
+        high_attention_segments=geology_result["high_attention_segments"],
+        digital_twin_state=digital_twin_state,
+    )
 
     return {
-        "segments": segments,
-        "seg_text": seg_text,
-        "stats": stats,
-        "stats_text": stats_text,
-        "df_geo": df_geo,
-        "df_state": df_state,
-        "state_labels": state_labels,
-        "state_segments": state_segments,
-        "state_text": state_text,
-        "eff_df": eff_df,
-        "eff_text": eff_text,
-        "state_stats": state_stats,
-        "state_stats_text": state_stats_text,
-        "gas_stats": gas_stats,
-        "gas_text": gas_text,
-        "geo_summary_record": geo_summary_record,
-        "geo_summary_segment": geo_summary_segment,
-        "geo_summary": geo_summary_segment,
-        "geo_text": geo_text,
-        "segment_df": segment_df,
-        "typical_segments_df": typical_segments_df,
-        "forward_risk_summary": forward_risk_summary,
-        "forward_risk_text": forward_risk_text,
-        "coupling_summary": coupling_summary,
-        "coupling_validation": coupling_validation,
-        "coupling_output_paths": coupling_output_paths,
-        "high_attention_segments": high_attention_segments,
+        "segments": operation_result["segments"],
+        "seg_text": operation_result["seg_text"],
+        "stats": operation_result["stats"],
+        "stats_text": operation_result["stats_text"],
+        "df_geo": geology_result["df_geo"],
+        "df_state": state_result["df_state"],
+        "state_labels": state_result["state_labels"],
+        "state_segments": state_result["state_segments"],
+        "state_text": state_result["state_text"],
+        "eff_df": state_result["eff_df"],
+        "eff_text": state_result["eff_text"],
+        "state_stats": state_result["state_stats"],
+        "state_stats_text": state_result["state_stats_text"],
+        "gas_stats": gas_result["gas_stats"],
+        "gas_text": gas_result["gas_text"],
+        "geo_summary_record": geology_result["geo_summary_record"],
+        "geo_summary_segment": geology_result["geo_summary_segment"],
+        "geo_summary": geology_result["geo_summary_segment"],
+        "geo_text": geology_result["geo_text"],
+        "segment_df": geology_result["segment_df"],
+        "typical_segments_df": geology_result["typical_segments_df"],
+        "forward_risk_summary": geology_result["forward_risk_summary"],
+        "forward_risk_text": geology_result["forward_risk_text"],
+        "coupling_summary": geology_result["coupling_summary"],
+        "coupling_validation": geology_result["coupling_validation"],
+        "coupling_output_paths": geology_result["coupling_output_paths"],
+        "high_attention_segments": geology_result["high_attention_segments"],
         "digital_twin_state": digital_twin_state,
         "llm_summary": llm_summary,
-        "face_geo_text": face_geo_text,
+        "face_geo_text": geology_result["face_geo_text"],
         "risk_prob_text": risk_prob_text,
+        "warnings": warnings,
     }
 
 

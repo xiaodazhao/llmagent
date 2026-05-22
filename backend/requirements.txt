@@ -7,3 +7,4 @@ python-dotenv
 PyMuPDF
 google-genai
 pydantic
+pytest

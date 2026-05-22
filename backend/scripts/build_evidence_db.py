@@ -16,6 +16,7 @@ from schemas.schemas import EvidenceRecord
 from parsers.tsp_parser import parse_tsp_pdf
 from parsers.hsp_parser import parse_hsp_pdf
 from parsers.sketch_parser import parse_sketch_pdf
+from services.sqlite_storage_service import sync_evidence_dataframe_to_db
 
 
 # ==============================
@@ -225,6 +226,7 @@ def main():
     DB_DIR.mkdir(parents=True, exist_ok=True)
     out_csv = DB_DIR / "evidence_db.csv"
     df.to_csv(out_csv, index=False, encoding="utf-8-sig")
+    sync_evidence_dataframe_to_db(df)
 
     print("\n==============================")
     print(f"清洗后记录数: {len(df)}")

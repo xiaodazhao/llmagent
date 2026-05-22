@@ -1,82 +1,92 @@
-# config.py
-from pathlib import Path
 import os
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional fallback for minimal environments
+    load_dotenv = None
 
 
-def get_data_root() -> Path:
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BACKEND_DIR.parent
+
+
+def _load_env_files() -> None:
+    if load_dotenv is None:
+        return
+    load_dotenv(PROJECT_ROOT / ".env")
+    load_dotenv(BACKEND_DIR / ".env")
+
+
+def _legacy_data_root() -> Path:
     """
-    自动识别 Google Drive 中的 TBM9 根目录
-    - Windows:
-        G:/我的云端硬盘/TBM9
-        G:/My Drive/TBM9
-    - Mac:
-        ~/Library/CloudStorage/GoogleDrive*/我的云端硬盘/TBM9
-        ~/Library/CloudStorage/GoogleDrive*/My Drive/TBM9
-    - 找不到时 fallback 到当前项目下的 ./data
+    保留现有项目的自动路径探测逻辑，作为 .env 未配置时的 fallback。
     """
-    # Windows
     if os.name == "nt":
         candidates = [
             Path("G:/我的云端硬盘/TBM9"),
             Path("G:/My Drive/TBM9"),
         ]
-        for p in candidates:
+        for path in candidates:
             try:
-                if p.exists():
-                    return p
+                if path.exists():
+                    return path
             except PermissionError:
                 continue
 
-    # macOS
     cloud_base = Path.home() / "Library/CloudStorage"
     if cloud_base.exists():
         drives = list(cloud_base.glob("GoogleDrive*"))
         for drive in drives:
             for root_name in ["我的云端硬盘", "My Drive"]:
-                p = drive / root_name / "TBM9"
-                if p.exists():
-                    return p
+                path = drive / root_name / "TBM9"
+                if path.exists():
+                    return path
 
-    # fallback
-    return Path(__file__).resolve().parent / "data"
+    return BACKEND_DIR / "data"
 
 
-# =========================
-# 根目录
-# =========================
-DATA_ROOT = get_data_root()
+def _resolve_path_env(name: str, default: Path) -> Path:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    value = Path(raw).expanduser()
+    if not value.is_absolute():
+        value = PROJECT_ROOT / value
+    return value
 
-# =========================
-# 你的实际目录结构
-# =========================
-# CSV 数据目录
-DATA_DIR = DATA_ROOT / "TBM9_2023"
 
-# PDF 目录
-TSP_DIR = DATA_ROOT / "TSP"
-HSP_DIR = DATA_ROOT / "HSP"
-SKETCH_DIR = DATA_ROOT / "SKETCH"
+def _resolve_float_env(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
 
-# 证据库目录
-DB_DIR = DATA_ROOT / "DB"
 
-# 输出目录
-RESULT_DIR = DATA_ROOT / "result"
-LOG_DIR = DATA_ROOT / "logs"
-DAILY_RESULT_DIR = DATA_ROOT / "result_daily_twin"
-HISTORY_MEMORY_DIR = DATA_ROOT / "analysis_history"
+_load_env_files()
 
-# 自动创建输出目录
-for d in [DB_DIR, RESULT_DIR, LOG_DIR, DAILY_RESULT_DIR, HISTORY_MEMORY_DIR]:
-    d.mkdir(parents=True, exist_ok=True)
+DATA_ROOT = _resolve_path_env("DATA_ROOT", _legacy_data_root())
+DATA_DIR = _resolve_path_env("DATA_DIR", DATA_ROOT / "TBM9_2023")
+TSP_DIR = _resolve_path_env("TSP_DIR", DATA_ROOT / "TSP")
+HSP_DIR = _resolve_path_env("HSP_DIR", DATA_ROOT / "HSP")
+SKETCH_DIR = _resolve_path_env("SKETCH_DIR", DATA_ROOT / "SKETCH")
+DRILL_DIR = _resolve_path_env("DRILL_DIR", DATA_ROOT / "DRILL")
 
-# evidence_db.csv
-EVIDENCE_DB_PATH = DB_DIR / "evidence_db.csv"
+DB_DIR = _resolve_path_env("DB_DIR", DATA_ROOT / "DB")
+RESULT_DIR = _resolve_path_env("RESULT_DIR", DATA_ROOT / "result")
+LOG_DIR = _resolve_path_env("LOG_DIR", DATA_ROOT / "logs")
+DAILY_RESULT_DIR = _resolve_path_env("DAILY_RESULT_DIR", DATA_ROOT / "result_daily_twin")
+HISTORY_MEMORY_DIR = _resolve_path_env("HISTORY_MEMORY_DIR", DATA_ROOT / "analysis_history")
 
-# 可选：如果以后还会用 drill
-DRILL_DIR = DATA_ROOT / "DRILL"
+APP_DB_PATH = _resolve_path_env("APP_DB_PATH", DB_DIR / "tbm_app.sqlite3")
+EVIDENCE_DB_PATH = _resolve_path_env("EVIDENCE_DB_PATH", DB_DIR / "evidence_db.csv")
 
-# 参数
-TOLERANCE_M = 3.0
-HIGH_RISK_LOOKAHEAD_M = 10.0
-NEXT_FORECAST_LOOKAHEAD_M = 5.0
+for directory in [DB_DIR, RESULT_DIR, LOG_DIR, DAILY_RESULT_DIR, HISTORY_MEMORY_DIR, APP_DB_PATH.parent]:
+    directory.mkdir(parents=True, exist_ok=True)
+
+TOLERANCE_M = _resolve_float_env("TOLERANCE_M", 3.0)
+HIGH_RISK_LOOKAHEAD_M = _resolve_float_env("HIGH_RISK_LOOKAHEAD_M", 10.0)
+NEXT_FORECAST_LOOKAHEAD_M = _resolve_float_env("NEXT_FORECAST_LOOKAHEAD_M", 5.0)

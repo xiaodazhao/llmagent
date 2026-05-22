@@ -4,6 +4,7 @@ import pandas as pd
 from geology.fusion import annotate_unique_chainage
 
 from config import EVIDENCE_DB_PATH
+from services.sqlite_storage_service import load_evidence_dataframe_from_db, sync_evidence_dataframe_to_db
 
 DEFAULT_EVIDENCE_DB_PATH = EVIDENCE_DB_PATH
 
@@ -16,12 +17,7 @@ def _safe_load_attrs(x):
         return {}
 
 
-def load_evidence_db(path=DEFAULT_EVIDENCE_DB_PATH):
-    """
-    读取证据库，并展开常用 attrs_json 字段
-    """
-    df = pd.read_csv(path)
-
+def _expand_evidence_attrs(df: pd.DataFrame) -> pd.DataFrame:
     if "attrs_json" in df.columns:
         df["attrs_obj"] = df["attrs_json"].apply(_safe_load_attrs)
 
@@ -37,6 +33,25 @@ def load_evidence_db(path=DEFAULT_EVIDENCE_DB_PATH):
         df["risk_tags"] = df["attrs_obj"].apply(lambda x: x.get("risk_tags", []))
 
     return df
+
+
+def load_evidence_db(path=DEFAULT_EVIDENCE_DB_PATH):
+    """
+    读取证据库，并展开常用 attrs_json 字段
+    """
+    try:
+        df = load_evidence_dataframe_from_db(path)
+        if not df.empty:
+            return _expand_evidence_attrs(df)
+    except Exception as exc:
+        print(f"SQLite evidence load failed, fallback to CSV: {exc}")
+
+    df = pd.read_csv(path)
+    try:
+        sync_evidence_dataframe_to_db(df)
+    except Exception as exc:
+        print(f"SQLite evidence sync skipped: {exc}")
+    return _expand_evidence_attrs(df)
 
 
 def _ensure_chainage_column(df: pd.DataFrame) -> pd.DataFrame:

@@ -3,7 +3,7 @@ from pathlib import Path
 import glob
 import pandas as pd
 
-from config import DATA_DIR, EVIDENCE_DB_PATH
+from config import APP_DB_PATH, DATA_DIR, EVIDENCE_DB_PATH
 from geology.geology_fusion_backend import load_evidence_db
 
 
@@ -81,11 +81,11 @@ def load_csv_by_date(date_str: str) -> tuple[Path, pd.DataFrame]:
 
 def load_evidence() -> pd.DataFrame:
     """
-    读取 evidence_db.csv
+    读取证据库（优先 SQLite，兼容 CSV）
     """
-    if not EVIDENCE_DB_PATH.exists():
+    if not EVIDENCE_DB_PATH.exists() and not APP_DB_PATH.exists():
         raise FileNotFoundError(
-            f"找不到 evidence_db.csv：{EVIDENCE_DB_PATH}\n"
+            f"找不到证据库文件：{EVIDENCE_DB_PATH}\n"
             f"请先运行：python scripts/build_evidence_db.py"
         )
     return load_evidence_db(EVIDENCE_DB_PATH)
@@ -99,8 +99,10 @@ def check_data_environment() -> dict:
     return {
         "DATA_DIR": str(DATA_DIR),
         "EVIDENCE_DB_PATH": str(EVIDENCE_DB_PATH),
+        "APP_DB_PATH": str(APP_DB_PATH),
         "data_dir_exists": DATA_DIR.exists(),
         "evidence_exists": EVIDENCE_DB_PATH.exists(),
+        "sqlite_exists": APP_DB_PATH.exists(),
         "csv_count": len(csv_files),
         "latest_csv": str(max(csv_files)) if csv_files else None,
     }

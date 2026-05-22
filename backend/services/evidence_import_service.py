@@ -13,6 +13,7 @@ from parsers.hsp_parser import parse_hsp_pdf
 from parsers.sketch_parser import parse_sketch_pdf
 from parsers.tsp_parser import parse_tsp_pdf
 from schemas.schemas import EvidenceRecord
+from services.sqlite_storage_service import sync_evidence_dataframe_to_db
 
 
 ParserFunc = Callable[[Path], list[EvidenceRecord]]
@@ -254,6 +255,7 @@ def import_evidence_files(
             backup_path = evidence_db_path.with_name(f"{evidence_db_path.stem}.bak_{stamp}{evidence_db_path.suffix}")
             shutil.copy2(evidence_db_path, backup_path)
         combined_df.to_csv(evidence_db_path, index=False, encoding="utf-8-sig")
+        sync_evidence_dataframe_to_db(combined_df)
         written = True
 
     return {

@@ -1,8 +1,9 @@
-import json
 from datetime import datetime
-from pathlib import Path
 
-from config import HISTORY_MEMORY_DIR
+from services.sqlite_storage_service import (
+    load_history_records_from_db,
+    save_history_record_to_db,
+)
 from utils.chainage_utils import format_chainage_dk
 
 
@@ -134,30 +135,12 @@ def build_history_record(date, analysis_result):
         },
     })
 
-
-def _record_path(date):
-    safe_date = str(date).replace("/", "-")
-    return Path(HISTORY_MEMORY_DIR) / f"{safe_date}.json"
-
-
 def save_history_record(record):
-    path = _record_path(record.get("date", "unknown"))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-    return path
+    return save_history_record_to_db(record)
 
 
 def load_history_records(limit=10, before_date=None):
-    records = []
-    for path in sorted(Path(HISTORY_MEMORY_DIR).glob("*.json")):
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if before_date and str(record.get("date", "")) >= str(before_date):
-            continue
-        records.append(record)
-    return records[-limit:]
+    return load_history_records_from_db(limit=limit, before_date=before_date)
 
 
 def _delta_text(name, current_value, previous_value, unit="", ndigits=1):
