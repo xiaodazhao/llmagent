@@ -11,22 +11,22 @@ import {
   YAxis,
 } from "recharts";
 
-import api from "@/api/client";
+import api, { getApiErrorMessage } from "@/api/client";
 
 export default function RiskProfilePage({ date }) {
   const [data, setData] = useState(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!date) return;
     setData(null);
-    setError(false);
+    setError("");
     api
       .get(`/api/tbm/risk_profile?date=${date}`)
       .then((res) => setData(res.data || {}))
       .catch((err) => {
         console.error("空间风险剖面加载失败", err);
-        setError(true);
+        setError(getApiErrorMessage(err, "空间风险剖面加载失败。"));
       });
   }, [date]);
 
@@ -46,7 +46,7 @@ export default function RiskProfilePage({ date }) {
     }));
   }, [profile, speedProfile]);
 
-  if (error) return <Empty text="空间风险剖面加载失败" />;
+  if (error) return <Empty text={error} />;
   if (!data) return <Empty text="正在加载空间风险剖面..." />;
 
   return (

@@ -1,22 +1,25 @@
 import { useEffect, useState } from "react";
 
-import api from "@/api/client";
+import api, { getApiErrorMessage } from "@/api/client";
 
 export default function StatePage({ date }) {
   const [data, setData] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!date) return;
     setData(null);
+    setError("");
     api
       .get(`/api/tbm/state?date=${date}`)
       .then((res) => setData(res.data || {}))
       .catch((err) => {
         console.error("施工状态数据加载失败", err);
-        setData({});
+        setError(getApiErrorMessage(err, "施工状态数据加载失败。"));
       });
   }, [date]);
 
+  if (error) return <Empty text={error} />;
   if (!data) return <Empty text="正在加载施工状态数据..." />;
 
   const segments = Array.isArray(data.segments) ? data.segments : [];

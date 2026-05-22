@@ -4,6 +4,18 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    chunkSizeWarningLimit: 700,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          charts: ["recharts"],
+          markdown: ["react-markdown", "remark-gfm"],
+          http: ["axios"],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

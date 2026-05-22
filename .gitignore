@@ -1,14 +1,23 @@
-# python
+# Python
 __pycache__/
 *.pyc
+.pytest_cache/
 tempCodeRunnerFile.py
+*.sqlite3
 
-# frontend
+# Frontend
 Frontend/node_modules/
 Frontend/dist/
 Frontend/*.log
 
-# 通用
+# Backend local/runtime
+backend/.env
+backend/data/
+backend/logs/
+backend/result/
+backend/result_daily_twin/
+
+# Common
 .env
 .DS_Store
 .vscode/

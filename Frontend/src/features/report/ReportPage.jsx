@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
-import api from "@/api/client";
+import api, { getApiErrorMessage } from "@/api/client";
 
 export default function ReportPage({ date }) {
   const [loading, setLoading] = useState(false);
@@ -24,7 +24,7 @@ export default function ReportPage({ date }) {
       setReport(res.data.report || "");
     } catch (err) {
       console.error("日报生成失败", err);
-      setError("日报生成失败，请检查后端服务或 LLM 配置。");
+      setError(getApiErrorMessage(err, "日报生成失败，请检查后端服务或 LLM 配置。"));
     } finally {
       setLoading(false);
     }

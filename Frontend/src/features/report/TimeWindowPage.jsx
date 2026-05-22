@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
-import api from "@/api/client";
+import api, { getApiErrorMessage } from "@/api/client";
 
 export default function TimeWindowPage({ date }) {
   const [startTime, setStartTime] = useState("");
@@ -38,14 +38,10 @@ export default function TimeWindowPage({ date }) {
         end_time: endTime,
       });
       const nextReport = res.data.report || "";
-      if (nextReport.startsWith("错误") || nextReport.startsWith("❌")) {
-        setErrorMsg(nextReport);
-      } else {
-        setReport(nextReport);
-      }
+      setReport(nextReport);
     } catch (err) {
       console.error("时间段报告生成失败", err);
-      setErrorMsg("时间段报告生成失败，请检查后端服务。");
+      setErrorMsg(getApiErrorMessage(err, "时间段报告生成失败，请检查后端服务。"));
     } finally {
       setLoading(false);
     }

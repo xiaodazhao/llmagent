@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { tbmApi } from "@/api/tbm";
+import { getApiErrorMessage } from "@/api/client";
 import "./evidence.css";
 
 const SOURCE_OPTIONS = [
@@ -52,7 +53,7 @@ export default function EvidenceImportPage() {
       setResult(res.data || {});
     } catch (err) {
       console.error("Evidence import failed", err);
-      setError("导入请求失败，请确认后端服务已启动。");
+      setError(getApiErrorMessage(err, "导入请求失败，请确认后端服务已启动。"));
     } finally {
       setLoading(false);
     }

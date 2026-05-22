@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
-import api from "@/api/client";
+import api, { getApiErrorMessage } from "@/api/client";
 
 export default function SummaryPage({ date }) {
   const [data, setData] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!date) return;
     setData(null);
+    setError("");
     api
       .get(`/api/tbm/summary?date=${date}`)
       .then((res) => setData(res.data || {}))
       .catch((err) => {
         console.error("概览数据加载失败", err);
-        setData({});
+        setError(getApiErrorMessage(err, "概览数据加载失败。"));
       });
   }, [date]);
 
@@ -28,6 +30,9 @@ export default function SummaryPage({ date }) {
     ].filter((item) => item.value > 0);
   }, [data]);
 
+  if (error) {
+    return <Empty text={error} />;
+  }
   if (!data) {
     return <Empty text="正在加载工况概览..." />;
   }

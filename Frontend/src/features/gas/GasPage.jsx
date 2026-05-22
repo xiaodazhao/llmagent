@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import api from "@/api/client";
+import api, { getApiErrorMessage } from "@/api/client";
 import GasChart from "./GasChart";
 
 const VIEW_OPTIONS = [
@@ -13,20 +13,20 @@ const GAS_ORDER = ["CH4", "CO2", "H2S", "SO2", "NO2", "NO"];
 
 export default function GasPage({ date }) {
   const [gas, setGas] = useState(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
   const [view, setView] = useState("all");
   const [focusGas, setFocusGas] = useState("");
 
   useEffect(() => {
     if (!date) return;
     setGas(null);
-    setError(false);
+    setError("");
     api
       .get(`/api/tbm/gas?date=${date}`)
       .then((res) => setGas(res.data || {}))
       .catch((err) => {
         console.error("气体数据加载失败", err);
-        setError(true);
+        setError(getApiErrorMessage(err, "气体监测数据加载失败。"));
       });
   }, [date]);
 
@@ -47,7 +47,7 @@ export default function GasPage({ date }) {
     }
   }, [gasItems, focusGas]);
 
-  if (error) return <Empty text="气体监测数据加载失败" />;
+  if (error) return <Empty text={error} />;
   if (!gas) return <Empty text="正在加载气体监测数据..." />;
 
   const current = gasItems.find((item) => item.key === focusGas) || gasItems[0];

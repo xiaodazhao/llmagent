@@ -10,22 +10,22 @@ import {
   YAxis,
 } from "recharts";
 
-import api from "@/api/client";
+import api, { getApiErrorMessage } from "@/api/client";
 
 export default function GeologyPage({ date }) {
   const [data, setData] = useState(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!date) return;
     setData(null);
-    setError(false);
+    setError("");
     api
       .get(`/api/tbm/geology?date=${date}`)
       .then((res) => setData(res.data || {}))
       .catch((err) => {
         console.error("地质融合数据加载失败", err);
-        setError(true);
+        setError(getApiErrorMessage(err, "地质融合数据加载失败。"));
       });
   }, [date]);
 
@@ -42,7 +42,7 @@ export default function GeologyPage({ date }) {
     ];
   }, [recordSummary]);
 
-  if (error) return <Empty text="地质融合数据加载失败" />;
+  if (error) return <Empty text={error} />;
   if (!data) return <Empty text="正在加载地质融合数据..." />;
 
   return (

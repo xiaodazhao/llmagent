@@ -1,21 +1,22 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 
-import api from "@/api/client";
-import SummaryPage from "@/features/summary/SummaryPage";
-import GeologyPage from "@/features/geology/GeologyPage";
-import StatePage from "@/features/state/StatePage";
-import GasPage from "@/features/gas/GasPage";
-import ReportPage from "@/features/report/ReportPage";
-import TimeWindowPage from "@/features/report/TimeWindowPage";
-import RiskProfilePage from "@/features/risk/RiskProfilePage";
-import AgentPage from "@/features/agent/AgentPage";
-import EvidenceImportPage from "@/features/evidence/EvidenceImportPage";
+import api, { getApiErrorMessage } from "@/api/client";
+const SummaryPage = lazy(() => import("@/features/summary/SummaryPage"));
+const GeologyPage = lazy(() => import("@/features/geology/GeologyPage"));
+const StatePage = lazy(() => import("@/features/state/StatePage"));
+const GasPage = lazy(() => import("@/features/gas/GasPage"));
+const ReportPage = lazy(() => import("@/features/report/ReportPage"));
+const TimeWindowPage = lazy(() => import("@/features/report/TimeWindowPage"));
+const RiskProfilePage = lazy(() => import("@/features/risk/RiskProfilePage"));
+const AgentPage = lazy(() => import("@/features/agent/AgentPage"));
+const EvidenceImportPage = lazy(() => import("@/features/evidence/EvidenceImportPage"));
 
 export default function Dashboard() {
   const [dates, setDates] = useState([]);
   const [currentDate, setCurrentDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     const fetchDates = async () => {
@@ -24,8 +25,10 @@ export default function Dashboard() {
         const list = res.data.dates || [];
         setDates(list);
         if (list.length > 0) setCurrentDate(list[0]);
+        setLoadError("");
       } catch (err) {
         console.error("日期加载失败", err);
+        setLoadError(getApiErrorMessage(err, "日期列表加载失败，请检查后端服务或数据目录。"));
       } finally {
         setLoading(false);
       }
@@ -35,9 +38,10 @@ export default function Dashboard() {
   }, []);
 
   const projectStatus = useMemo(() => {
+    if (loadError) return loadError;
     if (!currentDate) return "等待选择数据日期";
     return `正在查看 ${currentDate} 的掘进数据`;
-  }, [currentDate]);
+  }, [currentDate, loadError]);
 
   if (loading) {
     return <div style={styles.loading}>正在初始化 TBM 监控驾驶舱...</div>;
@@ -76,35 +80,53 @@ export default function Dashboard() {
         <QuickStat label="问答助手" value={agentOpen ? "已打开" : "待唤起"} />
       </section>
 
-      <EvidenceImportPage />
+      {loadError && <div style={styles.errorBanner}>{loadError}</div>}
+
+      <SectionSuspense text="正在加载证据导入模块...">
+        <EvidenceImportPage />
+      </SectionSuspense>
 
       <section style={styles.grid}>
         <Panel title="工况概览" eyebrow="施工节奏">
-          <SummaryPage date={currentDate} />
+          <SectionSuspense text="正在加载工况概览...">
+            <SummaryPage date={currentDate} />
+          </SectionSuspense>
         </Panel>
 
         <Panel title="地质融合分析" eyebrow="围岩与风险">
-          <GeologyPage date={currentDate} />
+          <SectionSuspense text="正在加载地质融合分析...">
+            <GeologyPage date={currentDate} />
+          </SectionSuspense>
         </Panel>
 
         <Panel title="施工状态识别" eyebrow="状态片段">
-          <StatePage date={currentDate} />
+          <SectionSuspense text="正在加载施工状态识别...">
+            <StatePage date={currentDate} />
+          </SectionSuspense>
         </Panel>
 
         <Panel title="气体监测" eyebrow="安全监测" span={3} minHeight={420}>
-          <GasPage date={currentDate} />
+          <SectionSuspense text="正在加载气体监测...">
+            <GasPage date={currentDate} />
+          </SectionSuspense>
         </Panel>
 
         <Panel title="空间风险剖面" eyebrow="里程关联" span={3} minHeight={420}>
-          <RiskProfilePage date={currentDate} />
+          <SectionSuspense text="正在加载空间风险剖面...">
+            <RiskProfilePage date={currentDate} />
+          </SectionSuspense>
         </Panel>
 
         <Panel title="智能日报" eyebrow="AI 报告" span={3} height={700}>
-          <ReportPage date={currentDate} />
+          <SectionSuspense text="正在加载智能日报...">
+            <ReportPage date={currentDate} />
+          </SectionSuspense>
         </Panel>
 
         <Panel title="时间段分析" eyebrow="局部复盘" span={3} height={700}>
-          <TimeWindowPage date={currentDate} />
+          <SectionSuspense text="正在加载时间段分析...">
+            <TimeWindowPage date={currentDate} />
+          </SectionSuspense>
         </Panel>
       </section>
 
@@ -132,7 +154,9 @@ export default function Dashboard() {
               关闭
             </button>
           </div>
-          <AgentPage date={currentDate} compact />
+          <SectionSuspense text="正在加载智能问答...">
+            <AgentPage date={currentDate} compact />
+          </SectionSuspense>
         </aside>
       )}
     </main>
@@ -167,6 +191,14 @@ function QuickStat({ label, value }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function SectionSuspense({ children, text }) {
+  return <Suspense fallback={<InlineLoader text={text} />}>{children}</Suspense>;
+}
+
+function InlineLoader({ text }) {
+  return <div style={styles.inlineLoader}>{text}</div>;
 }
 
 const styles = {
@@ -255,6 +287,16 @@ const styles = {
     gap: 12,
     alignItems: "center",
   },
+  errorBanner: {
+    margin: "0 0 18px",
+    borderRadius: 12,
+    border: "1px solid #fecaca",
+    background: "#fef2f2",
+    color: "#b91c1c",
+    padding: "12px 14px",
+    fontSize: 13,
+    fontWeight: 700,
+  },
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
@@ -295,6 +337,17 @@ const styles = {
     flex: 1,
     minHeight: 0,
     overflow: "auto",
+  },
+  inlineLoader: {
+    minHeight: 180,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    background: "linear-gradient(135deg, rgba(236, 254, 255, 0.95) 0%, rgba(248, 250, 252, 0.96) 100%)",
+    color: "#475569",
+    fontSize: 14,
+    fontWeight: 700,
   },
   agentButton: {
     position: "fixed",
