@@ -93,7 +93,9 @@ export default function GasPage({ date }) {
         <div style={styles.focusHeader}>
           <div>
             <div style={styles.focusTitle}>{current?.label || "气体"} 重点指标</div>
-            <div style={styles.focusSub}>当前视图：{VIEW_OPTIONS.find((item) => item.key === view)?.label}</div>
+            <div style={styles.focusSub}>
+              当前视图：{VIEW_OPTIONS.find((item) => item.key === view)?.label}
+            </div>
           </div>
           <span style={exceedCount > 0 ? styles.badgeDanger : styles.badgeOk}>{status}</span>
         </div>

@@ -37,8 +37,7 @@ export default function TimeWindowPage({ date }) {
         start_time: startTime,
         end_time: endTime,
       });
-      const nextReport = res.data.report || "";
-      setReport(nextReport);
+      setReport(res.data.report || "");
     } catch (err) {
       console.error("时间段报告生成失败", err);
       setErrorMsg(getApiErrorMessage(err, "时间段报告生成失败，请检查后端服务。"));
@@ -77,13 +76,13 @@ export default function TimeWindowPage({ date }) {
 
       <div style={styles.reportBox}>
         {loading ? (
-          <Empty title="正在分析时间段" text="系统正在截取所选时间段并生成报告。" />
+          <Empty title="正在分析时间段" text="系统正在截取所选时间窗并生成分析报告。" />
         ) : report ? (
           <div className="markdown-body" style={styles.markdown}>
             <ReactMarkdown>{report}</ReactMarkdown>
           </div>
         ) : (
-          <Empty title="尚未生成时间段报告" text="选择具体起止时间后，点击生成报告。" />
+          <Empty title="尚未生成时间段报告" text="选择起止时间后，点击生成报告。" />
         )}
       </div>
     </div>
@@ -99,7 +98,7 @@ function Field({ label, value, onChange, date }) {
         value={value}
         min={`${date}T00:00`}
         max={`${date}T23:59`}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(event) => onChange(event.target.value)}
         style={styles.input}
       />
     </label>

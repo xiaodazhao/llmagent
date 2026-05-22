@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 
 import api, { getApiErrorMessage } from "@/api/client";
+
 const SummaryPage = lazy(() => import("@/features/summary/SummaryPage"));
 const GeologyPage = lazy(() => import("@/features/geology/GeologyPage"));
 const StatePage = lazy(() => import("@/features/state/StatePage"));
@@ -44,7 +45,7 @@ export default function Dashboard() {
   }, [currentDate, loadError]);
 
   if (loading) {
-    return <div style={styles.loading}>正在初始化 TBM 监控驾驶舱...</div>;
+    return <div style={styles.loading}>正在初始化 TBM 监测驾驶舱...</div>;
   }
 
   return (
@@ -60,12 +61,12 @@ export default function Dashboard() {
           <label style={styles.dateLabel}>数据日期</label>
           <select
             value={currentDate}
-            onChange={(e) => setCurrentDate(e.target.value)}
+            onChange={(event) => setCurrentDate(event.target.value)}
             style={styles.select}
           >
-            {dates.map((d) => (
-              <option key={d} value={d}>
-                {d}
+            {dates.map((item) => (
+              <option key={item} value={item}>
+                {item}
               </option>
             ))}
           </select>

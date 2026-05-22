@@ -30,12 +30,8 @@ export default function SummaryPage({ date }) {
     ].filter((item) => item.value > 0);
   }, [data]);
 
-  if (error) {
-    return <Empty text={error} />;
-  }
-  if (!data) {
-    return <Empty text="正在加载工况概览..." />;
-  }
+  if (error) return <Empty text={error} />;
+  if (!data) return <Empty text="正在加载工况概览..." />;
 
   return (
     <div style={styles.wrapper}>

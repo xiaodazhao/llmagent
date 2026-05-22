@@ -11,7 +11,7 @@ const SOURCE_OPTIONS = [
   { value: "sketch", label: "素描" },
 ];
 
-const DEFAULT_PATH = "G:\\我的云端硬盘\\TBM9\\TSP\\新超报.pdf";
+const DEFAULT_PATH = "G:\\我的云端硬盘\\TBM9\\TSP\\新超前地质预报\\pdf";
 
 export default function EvidenceImportPage() {
   const [pathsText, setPathsText] = useState(DEFAULT_PATH);
@@ -32,7 +32,8 @@ export default function EvidenceImportPage() {
     [pathsText],
   );
 
-  const sourceLabel = SOURCE_OPTIONS.find((item) => item.value === sourceType)?.label || "自动识别";
+  const sourceLabel =
+    SOURCE_OPTIONS.find((item) => item.value === sourceType)?.label || "自动识别";
   const canSubmit = paths.length > 0 && !loading;
 
   const handleSubmit = async () => {
@@ -129,12 +130,12 @@ export default function EvidenceImportPage() {
           </div>
 
           <div className="evidence-switches">
-            <Switch checked={replaceExisting} onChange={setReplaceExisting} label="覆盖同 ID" />
+            <Switch checked={replaceExisting} onChange={setReplaceExisting} label="覆盖同 ID 记录" />
             <Switch checked={recursive} onChange={setRecursive} label="递归目录" />
           </div>
 
           <button className="evidence-submit" type="submit" disabled={!canSubmit}>
-            {loading ? "处理中" : dryRun ? "运行预检" : "写入证据库"}
+            {loading ? "处理中..." : dryRun ? "运行预检" : "写入证据库"}
           </button>
         </form>
 
@@ -211,7 +212,9 @@ function ImportResult({ result, error, pathCount }) {
             <div className="evidence-list__row" key={`${item.path}-${index}`}>
               <span className={`evidence-dot evidence-dot--${item.status}`} />
               <div>
-                <strong>{item.source_type || "--"} · {item.record_count ?? 0} 条</strong>
+                <strong>
+                  {item.source_type || "--"} · {item.record_count ?? 0} 条
+                </strong>
                 <p>{item.path}</p>
               </div>
             </div>

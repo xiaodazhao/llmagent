@@ -103,7 +103,7 @@ export default function RiskProfilePage({ date }) {
                   stroke="#dc2626"
                   strokeWidth={3}
                   dot={false}
-                  name="风险证据源"
+                  name="风险证据源数量"
                 />
                 <Line
                   yAxisId="right"
@@ -138,7 +138,7 @@ function formatChainage(chainage) {
 
 function firstNumeric(row, exclude = []) {
   const found = Object.entries(row || {}).find(
-    ([key, value]) => !exclude.includes(key) && Number.isFinite(Number(value))
+    ([key, value]) => !exclude.includes(key) && Number.isFinite(Number(value)),
   );
   return found ? Number(found[1]) : null;
 }

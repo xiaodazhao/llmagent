@@ -31,7 +31,7 @@ export default function StatePage({ date }) {
         <div style={styles.sectionHeader}>
           <div>
             <div style={styles.sectionTitle}>状态时间线</div>
-            <div style={styles.sectionSub}>识别到 {segments.length} 个状态片段</div>
+            <div style={styles.sectionSub}>共识别 {segments.length} 个状态片段</div>
           </div>
         </div>
 
@@ -44,7 +44,9 @@ export default function StatePage({ date }) {
                 <span style={styles.stateDot} />
                 <div style={styles.timelineMain}>
                   <strong>{segment.label_text || `施工状态 ${segment.label}`}</strong>
-                  <span>{segment.start || "--"} 至 {segment.end || "--"}</span>
+                  <span>
+                    {segment.start || "--"} 至 {segment.end || "--"}
+                  </span>
                 </div>
                 <div style={styles.duration}>{duration(segment.duration)}</div>
               </div>
