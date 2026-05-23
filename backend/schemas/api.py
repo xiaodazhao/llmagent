@@ -13,6 +13,8 @@ class TimeWindowRequest(BaseModel):
 class AgentRequest(BaseModel):
     query: str
     date: str | None = None
+    session_id: str | None = None
+    history_limit: int = 8
     use_llm: bool = False
     verbose: bool = False
 

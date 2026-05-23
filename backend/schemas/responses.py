@@ -109,3 +109,19 @@ class RiskProfilePayload(BaseModel):
     date: str | None = None
     risk_profile: dict[str, Any] = Field(default_factory=dict)
     speed_profile: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class AgentMessagePayload(BaseModel):
+    message_id: int | None = None
+    session_id: str | None = None
+    role: str
+    created_at: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentSessionPayload(BaseModel):
+    session_id: str
+    title: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    messages: list[AgentMessagePayload] = Field(default_factory=list)

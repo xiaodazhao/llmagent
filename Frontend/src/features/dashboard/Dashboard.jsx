@@ -38,6 +38,25 @@ export default function Dashboard() {
     fetchDates();
   }, []);
 
+  useEffect(() => {
+    if (!agentOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setAgentOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [agentOpen]);
+
   const projectStatus = useMemo(() => {
     if (loadError) return loadError;
     if (!currentDate) return "等待选择数据日期";
@@ -139,27 +158,36 @@ export default function Dashboard() {
         {agentOpen ? "收起问答" : "智能问答"}
       </button>
 
-      {agentOpen && (
-        <aside style={styles.agentWindow}>
-          <div style={styles.agentWindowHeader}>
-            <div>
-              <h2 style={styles.agentWindowTitle}>TBM 智能问答</h2>
-              <p style={styles.agentWindowSubtitle}>当前日期：{currentDate || "--"}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setAgentOpen(false)}
-              style={styles.closeButton}
-              aria-label="关闭问答窗口"
-            >
-              关闭
-            </button>
+      {agentOpen && <div style={styles.agentBackdrop} onClick={() => setAgentOpen(false)} />}
+
+      <aside
+        style={{
+          ...styles.agentDrawer,
+          transform: agentOpen ? "translateX(0)" : "translateX(calc(100% + 24px))",
+          pointerEvents: agentOpen ? "auto" : "none",
+        }}
+        aria-hidden={!agentOpen}
+      >
+        <div style={styles.agentWindowHeader}>
+          <div>
+            <h2 style={styles.agentWindowTitle}>TBM 智能问答</h2>
+            <p style={styles.agentWindowSubtitle}>当前日期：{currentDate || "--"}</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setAgentOpen(false)}
+            style={styles.closeButton}
+            aria-label="关闭问答抽屉"
+          >
+            关闭
+          </button>
+        </div>
+        <div style={styles.agentDrawerBody}>
           <SectionSuspense text="正在加载智能问答...">
             <AgentPage date={currentDate} compact />
           </SectionSuspense>
-        </aside>
-      )}
+        </div>
+      </aside>
     </main>
   );
 }
@@ -365,21 +393,28 @@ const styles = {
     fontWeight: 800,
     padding: "14px 20px",
   },
-  agentWindow: {
+  agentBackdrop: {
     position: "fixed",
-    right: 28,
-    bottom: 86,
+    inset: 0,
+    background: "rgba(15, 23, 42, 0.28)",
+    backdropFilter: "blur(2px)",
+    zIndex: 30,
+  },
+  agentDrawer: {
+    position: "fixed",
+    top: 0,
+    right: 0,
     zIndex: 31,
-    width: "min(580px, calc(100vw - 32px))",
-    height: "min(740px, calc(100vh - 120px))",
+    width: "min(720px, 100vw)",
+    height: "100vh",
     background: "#ffffff",
-    border: "1px solid #cbd5e1",
-    borderRadius: 14,
-    boxShadow: "0 26px 80px rgba(15, 23, 42, 0.24)",
-    padding: 18,
+    borderLeft: "1px solid #cbd5e1",
+    boxShadow: "-24px 0 80px rgba(15, 23, 42, 0.22)",
+    padding: "20px 20px 16px",
     display: "flex",
     flexDirection: "column",
     gap: 14,
+    transition: "transform 220ms ease",
   },
   agentWindowHeader: {
     display: "flex",
@@ -398,6 +433,11 @@ const styles = {
     margin: "4px 0 0",
     color: "#64748b",
     fontSize: 13,
+  },
+  agentDrawerBody: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "hidden",
   },
   closeButton: {
     borderRadius: 9,

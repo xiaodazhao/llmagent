@@ -85,6 +85,26 @@ def ensure_storage_initialized() -> None:
 
                 CREATE INDEX IF NOT EXISTS idx_file_cache_lookup
                 ON file_cache_entries (namespace, source_path);
+
+                CREATE TABLE IF NOT EXISTS agent_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    title TEXT,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS agent_messages (
+                    message_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(session_id) REFERENCES agent_sessions(session_id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_agent_messages_session
+                ON agent_messages (session_id, message_id);
                 """
             )
 
@@ -198,6 +218,123 @@ def load_history_records_from_db(limit: int = 10, before_date: str | None = None
     records = [json.loads(row["payload_json"]) for row in rows]
     records.reverse()
     return records
+
+
+def save_agent_session(session_id: str, payload: dict | None = None, title: str | None = None) -> None:
+    ensure_storage_initialized()
+    session_payload = serialize_for_json(payload or {})
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO agent_sessions (session_id, title, payload_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET
+                title = COALESCE(excluded.title, agent_sessions.title),
+                payload_json = excluded.payload_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                str(session_id),
+                title,
+                json.dumps(session_payload, ensure_ascii=False),
+                _now_text(),
+                _now_text(),
+            ),
+        )
+
+
+def load_agent_session(session_id: str) -> dict | None:
+    ensure_storage_initialized()
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT session_id, title, payload_json, created_at, updated_at
+            FROM agent_sessions
+            WHERE session_id = ?
+            """,
+            (str(session_id),),
+        ).fetchone()
+
+    if not row:
+        return None
+
+    payload = json.loads(row["payload_json"]) if row["payload_json"] else {}
+    return {
+        "session_id": row["session_id"],
+        "title": row["title"],
+        "payload": payload,
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def append_agent_message(
+    session_id: str,
+    role: str,
+    payload: dict,
+    *,
+    session_title: str | None = None,
+    session_payload: dict | None = None,
+) -> int:
+    ensure_storage_initialized()
+    message_payload = serialize_for_json(payload)
+    save_agent_session(
+        session_id=session_id,
+        payload=session_payload or {},
+        title=session_title,
+    )
+
+    with _connect() as conn:
+        conn.execute(
+            """
+            UPDATE agent_sessions
+            SET updated_at = ?
+            WHERE session_id = ?
+            """,
+            (_now_text(), str(session_id)),
+        )
+        cursor = conn.execute(
+            """
+            INSERT INTO agent_messages (session_id, role, payload_json, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                str(session_id),
+                str(role),
+                json.dumps(message_payload, ensure_ascii=False),
+                _now_text(),
+            ),
+        )
+        return int(cursor.lastrowid)
+
+
+def load_agent_messages(session_id: str, limit: int = 20) -> list[dict]:
+    ensure_storage_initialized()
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT message_id, role, payload_json, created_at
+            FROM agent_messages
+            WHERE session_id = ?
+            ORDER BY message_id DESC
+            LIMIT ?
+            """,
+            (str(session_id), int(limit)),
+        ).fetchall()
+
+    messages = []
+    for row in reversed(rows):
+        payload = json.loads(row["payload_json"]) if row["payload_json"] else {}
+        messages.append(
+            {
+                "message_id": int(row["message_id"]),
+                "session_id": str(session_id),
+                "role": row["role"],
+                "created_at": row["created_at"],
+                "payload": payload,
+            }
+        )
+    return messages
 
 
 def _sanitize_dataframe_records(df: pd.DataFrame) -> list[dict]:

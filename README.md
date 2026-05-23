@@ -19,7 +19,7 @@
 - `TBM CSV` 工况分段、施工状态识别、气体统计、速度剖面分析
 - `TSP / HSP / 素描 PDF` 解析、证据去重、里程挂接、证据库沉淀
 - `GRS / RAI / GRCI` 地质风险、施工响应和耦合关系分析
-- `日报 / 时间窗分析 / Agent 问答` 三类分析入口
+- `日报 / 时间窗分析 / 会话式 Agent 问答` 三类分析入口
 - `SQLite + 内存缓存` 支撑历史记录、证据库和日分析缓存
 - `pytest` 回归测试覆盖核心分析、路由、解析和导入链路
 
@@ -70,7 +70,7 @@ flowchart LR
 | `ReportPage` | 智能日报 | 结构化日报与 Markdown 渲染 |
 | `TimeWindowPage` | 时间窗分析 | 局部时段复盘 |
 | `EvidenceImportPage` | 证据导入 | PDF 预检、入库、去重反馈 |
-| `AgentPage` | 智能问答 | 围绕当日数据的问答入口 |
+| `AgentPage` | 智能问答 | 右侧抽屉式问答、会话记忆、专家调度轨迹 |
 
 ## 快速开始
 
@@ -140,8 +140,8 @@ http://127.0.0.1:5173
 | `GET` | `/api/tbm/history_memory` | 历史分析对比 |
 | `POST` | `/api/tbm/report` | 智能日报生成 |
 | `POST` | `/api/tbm/report_by_time` | 时间窗报告生成 |
-| `POST` | `/api/tbm/agent` | Agent 问答 |
-| `POST` | `/api/tbm/agent_v2` | Supervisor Agent |
+| `POST` | `/api/tbm/agent_v2` | 会话式 Supervisor Agent 问答 |
+| `GET` | `/api/tbm/agent_v2/session` | 读取问答会话历史 |
 | `POST` | `/api/tbm/evidence/import` | 证据 PDF 增量导入 |
 
 ## 测试与构建
@@ -210,6 +210,7 @@ docs/
 - `.env` 配置化路径
 - 路由、解析、耦合、历史、导入等后端测试
 - 前端懒加载与构建拆包
+- 抽屉式问答界面、会话记忆和上下文规划型 supervisor agent
 
 下一步适合继续推进的方向：
 

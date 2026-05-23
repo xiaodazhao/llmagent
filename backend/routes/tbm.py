@@ -7,12 +7,12 @@ import pandas as pd
 from fastapi import APIRouter, FastAPI
 
 from agent.supervisor_agent import TBMSupervisorAgent
-from agent.tbm_agent import TBMAgent
 from llm.llm_api import call_llm
 from llm.prompt_builder import build_prompt
 from llm.prompt_builder_timewindow import build_prompt_timewindow
 from schemas.api import AgentRequest, DailyReportRequest, EvidenceImportRequest, TimeWindowRequest
 from schemas.responses import (
+    AgentSessionPayload,
     ApiEnvelope,
     DatesPayload,
     DigitalTwinPayload,
@@ -32,6 +32,7 @@ from services.history_memory_service import (
     load_history_records,
     save_history_record,
 )
+from services.sqlite_storage_service import load_agent_messages, load_agent_session
 from utils.api_response import api_error, api_success
 from utils.io_utils import get_all_csv_paths, get_csv_path_by_date, get_latest_csv_path, load_csv, load_csv_by_date
 from utils.serialization import serialize_for_json
@@ -251,11 +252,6 @@ def register_tbm_routes(
     build_speed_profile,
 ):
     router = APIRouter(prefix="/api/tbm", tags=["tbm"])
-    tbm_agent = TBMAgent(
-        analyze_tbm_data=analyze_tbm_data,
-        build_risk_profile=build_risk_profile,
-        build_speed_profile=build_speed_profile,
-    )
     tbm_supervisor_agent = TBMSupervisorAgent(
         analyze_tbm_data=analyze_tbm_data,
         build_risk_profile=build_risk_profile,
@@ -298,23 +294,13 @@ def register_tbm_routes(
         except Exception as exc:
             return _internal_error("日期列表加载失败", exc)
 
-    @router.post("/agent")
-    def run_tbm_agent(req: AgentRequest):
-        return tbm_agent.run(
-            query=req.query,
-            date=req.date,
-            use_llm=req.use_llm,
-        )
-
-    @router.get("/agent/capabilities")
-    def tbm_agent_capabilities():
-        return tbm_agent.capabilities()
-
     @router.post("/agent_v2")
     def run_tbm_supervisor_agent(req: AgentRequest):
         return tbm_supervisor_agent.run(
             query=req.query,
             date=req.date,
+            session_id=req.session_id,
+            history_limit=req.history_limit,
             use_llm=req.use_llm,
             verbose=req.verbose,
         )
@@ -322,6 +308,32 @@ def register_tbm_routes(
     @router.get("/agent_v2/capabilities")
     def tbm_supervisor_agent_capabilities():
         return tbm_supervisor_agent.capabilities()
+
+    @router.get("/agent_v2/session", response_model=ApiEnvelope[AgentSessionPayload])
+    def tbm_supervisor_agent_session(session_id: str, limit: int = 30):
+        try:
+            session = load_agent_session(session_id)
+            if not session:
+                return api_success(
+                    {
+                        "session_id": session_id,
+                        "title": None,
+                        "created_at": None,
+                        "updated_at": None,
+                        "messages": [],
+                    }
+                )
+
+            payload = {
+                "session_id": session_id,
+                "title": session.get("title"),
+                "created_at": session.get("created_at"),
+                "updated_at": session.get("updated_at"),
+                "messages": load_agent_messages(session_id, limit=limit),
+            }
+            return api_success(payload)
+        except Exception as exc:
+            return _internal_error("问答会话加载失败", exc, meta={"session_id": session_id, "limit": limit})
 
     @router.post("/evidence/import", response_model=ApiEnvelope[EvidenceImportPayload])
     def import_evidence_api(req: EvidenceImportRequest):

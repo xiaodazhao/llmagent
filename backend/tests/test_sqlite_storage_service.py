@@ -85,3 +85,35 @@ def test_evidence_dataframe_and_file_cache_round_trip(isolated_sqlite_env, tmp_p
 
     loaded_from_csv = sqlite_storage_service.load_evidence_dataframe_from_db(fallback_csv)
     assert loaded_from_csv["evidence_id"].tolist() == ["csv-1"]
+
+
+def test_agent_session_messages_round_trip(isolated_sqlite_env):
+    sqlite_storage_service, _, _ = isolated_sqlite_env
+
+    sqlite_storage_service.save_agent_session(
+        "session-demo",
+        payload={"last_date": "2026-05-22"},
+        title="测试会话",
+    )
+    sqlite_storage_service.append_agent_message(
+        "session-demo",
+        "user",
+        {"query": "今天怎么样", "date": "2026-05-22"},
+        session_title="测试会话",
+        session_payload={"last_query": "今天怎么样"},
+    )
+    sqlite_storage_service.append_agent_message(
+        "session-demo",
+        "assistant",
+        {"answer": "今天总体稳定", "routed_agents": ["DataAgent"]},
+        session_title="测试会话",
+        session_payload={"last_query": "今天怎么样"},
+    )
+
+    session = sqlite_storage_service.load_agent_session("session-demo")
+    messages = sqlite_storage_service.load_agent_messages("session-demo", limit=10)
+
+    assert session["title"] == "测试会话"
+    assert session["payload"]["last_query"] == "今天怎么样"
+    assert [item["role"] for item in messages] == ["user", "assistant"]
+    assert messages[1]["payload"]["answer"] == "今天总体稳定"

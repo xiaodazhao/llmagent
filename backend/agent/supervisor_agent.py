@@ -1,16 +1,39 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Optional
+from uuid import uuid4
 
 from agent.common import fail, ok
 from agent.registry import describe_capabilities
 from agent.tbm_tools import TBMTools
 from llm.llm_api import call_llm
+from services.sqlite_storage_service import (
+    append_agent_message,
+    load_agent_messages,
+)
 
 
 DATE_RE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
+FOLLOW_UP_MARKERS = (
+    "继续",
+    "展开",
+    "详细",
+    "再说",
+    "进一步",
+    "为什么",
+    "原因",
+    "怎么回事",
+    "那一段",
+    "这个区段",
+    "刚才",
+    "上一个",
+    "前面",
+    "它",
+)
+EXPLANATION_MARKERS = ("为什么", "原因", "解释", "怎么回事", "怎么看", "为何")
+RECOMMENDATION_MARKERS = ("建议", "怎么做", "需要注意", "措施", "怎么办")
 
 
 @dataclass(frozen=True)
@@ -18,6 +41,20 @@ class SupervisorStep:
     agent: str
     tools: tuple[str, ...]
     reason: str
+
+
+@dataclass(frozen=True)
+class ConversationContext:
+    session_id: str
+    messages: tuple[dict[str, Any], ...]
+    last_user_query: str | None = None
+    last_answer: str | None = None
+    last_date: str | None = None
+    last_routed_agents: tuple[str, ...] = ()
+    last_highlights: dict[str, Any] | None = None
+    last_focus_segment: str | None = None
+    last_forward_level: str | None = None
+    follow_up: bool = False
 
 
 class DomainAgent:
@@ -123,7 +160,9 @@ class TBMSupervisorAgent:
             "name": "TBMSupervisorAgent",
             "description": "Routes user requests to specialist TBM domain agents.",
             "active_agents": list(self.domain_agents.keys()),
-            "mode": "supervisor-style",
+            "mode": "contextual-supervisor",
+            "session_memory": True,
+            "planning_mode": "hybrid-rule-context",
         }
         return capabilities
 
@@ -131,6 +170,8 @@ class TBMSupervisorAgent:
         self,
         query: str,
         date: Optional[str] = None,
+        session_id: Optional[str] = None,
+        history_limit: int = 8,
         use_llm: bool = False,
         verbose: bool = False,
     ) -> dict[str, Any]:
@@ -138,8 +179,12 @@ class TBMSupervisorAgent:
         if not query:
             return fail("query is required", tool="tbm_supervisor_agent")
 
-        selected_date = date or self._extract_date(query)
-        supervisor_plan = self._plan(query)
+        active_session_id = (session_id or "").strip() or str(uuid4())
+        context = self._load_context(active_session_id, history_limit)
+        context = replace(context, follow_up=self._is_follow_up(query.lower()))
+        selected_date = date or self._extract_date(query) or context.last_date
+        effective_query = self._normalize_query(query, context, selected_date)
+        supervisor_plan = self._plan(effective_query, context)
         self.tools.clear_cache()
 
         agent_results = []
@@ -170,12 +215,20 @@ class TBMSupervisorAgent:
                     trace=agent_results,
                 )
 
-        answer = self._build_answer(query, selected_date, supervisor_plan, flat_tool_results)
+        answer = self._build_answer(
+            query,
+            selected_date,
+            supervisor_plan,
+            flat_tool_results,
+            context=context,
+        )
         if use_llm:
-            answer = self._polish_with_llm(query, answer)
+            answer = self._polish_with_llm(query, answer, context)
 
         payload = {
+            "session_id": active_session_id,
             "query": query,
+            "effective_query": effective_query,
             "date": selected_date,
             "mode": "supervisor_v2",
             "verbose": verbose,
@@ -190,12 +243,21 @@ class TBMSupervisorAgent:
             "routed_agents": [step.agent for step in supervisor_plan],
             "answer": answer,
             "highlights": self._build_highlights(flat_tool_results),
+            "context_summary": self._context_summary(context, selected_date),
             "agent_results": self._compact_agent_results(agent_results),
             "tool_results": self._compact_tool_results(flat_tool_results),
         }
         if verbose:
             payload["agent_results"] = agent_results
             payload["tool_results"] = flat_tool_results
+            payload["context_messages"] = list(context.messages)
+
+        self._persist_turn(
+            session_id=active_session_id,
+            query=query,
+            selected_date=selected_date,
+            payload=payload,
+        )
 
         return ok(
             payload,
@@ -205,9 +267,12 @@ class TBMSupervisorAgent:
             tool_calls=len(flat_tool_results),
         )
 
-    def _plan(self, query: str) -> list[SupervisorStep]:
+    def _plan(self, query: str, context: ConversationContext) -> list[SupervisorStep]:
         q = query.lower()
         steps: list[SupervisorStep] = []
+        inherited_agents = self._inherit_agents_from_context(q, context)
+        needs_explanation = self._has_any(q, list(EXPLANATION_MARKERS))
+        needs_recommendation = self._has_any(q, list(RECOMMENDATION_MARKERS))
 
         if self._has_any(q, ["date", "dates", "available", "日期", "有哪些数据"]):
             return [
@@ -225,14 +290,14 @@ class TBMSupervisorAgent:
                 reason="请求需要读取数据文件并返回基础元信息。",
             ))
 
-        if self._has_any(q, ["summary", "daily", "overview", "report", "总览", "概况", "日报", "总结"]):
+        if self._has_any(q, ["summary", "daily", "overview", "report", "总览", "概况", "日报", "总结", "今天怎么样", "整体情况"]):
             steps.append(SupervisorStep(
                 agent="DataAgent",
                 tools=("analyze_day",),
                 reason="用户需要当天综合分析摘要。",
             ))
 
-        if self._has_any(q, ["operation", "efficiency", "stop", "work", "state", "工况", "效率", "停机", "工作", "施工状态"]):
+        if self._has_any(q, ["operation", "efficiency", "stop", "work", "state", "工况", "效率", "停机", "工作", "施工状态", "推进", "负载", "扭矩", "速度"]):
             steps.append(SupervisorStep(
                 agent="OperationAgent",
                 tools=("analyze_operation",),
@@ -247,12 +312,16 @@ class TBMSupervisorAgent:
             ))
 
         geology_tools = []
-        if self._has_any(q, ["geology", "geo", "coupling", "cri", "地质", "围岩", "耦合"]):
+        if self._has_any(q, ["geology", "geo", "coupling", "cri", "地质", "围岩", "耦合", "区段", "掌子面", "围岩级别"]):
             geology_tools.append("analyze_geology")
-        if self._has_any(q, ["forward", "lookahead", "ahead", "前方", "超前", "预测"]):
+        if self._has_any(q, ["forward", "lookahead", "ahead", "前方", "超前", "预测", "前探"]):
             geology_tools.append("analyze_forward_risk")
         if self._has_any(q, ["profile", "risk profile", "speed profile", "风险剖面", "速度剖面", "沿程"]):
             geology_tools.append("risk_profile")
+        if needs_explanation and (context.last_focus_segment or "耦合" in q or "高风险" in q or "异常" in q):
+            geology_tools.append("analyze_geology")
+        if needs_recommendation and (context.last_forward_level or "前方" in q or "建议" in q):
+            geology_tools.append("analyze_forward_risk")
         if geology_tools:
             steps.append(SupervisorStep(
                 agent="GeologyAgent",
@@ -260,19 +329,53 @@ class TBMSupervisorAgent:
                 reason="请求涉及地质、前方风险、耦合或沿程剖面分析。",
             ))
 
-        if self._has_any(q, ["digital", "twin", "数字孪生", "孪生", "状态快照"]):
+        if self._has_any(q, ["digital", "twin", "数字孪生", "孪生", "状态快照", "当前位置", "当前里程"]):
             steps.append(SupervisorStep(
                 agent="TwinAgent",
                 tools=("get_digital_twin_state",),
                 reason="请求需要数字孪生状态快照。",
             ))
 
-        if self._has_any(q, ["history", "compare", "trend", "历史", "对比", "趋势"]):
+        if self._has_any(q, ["history", "compare", "trend", "历史", "对比", "趋势", "相比", "变化", "上次", "之前"]):
             steps.append(SupervisorStep(
                 agent="MemoryAgent",
                 tools=("compare_history",),
                 reason="请求需要历史记忆对比。",
             ))
+
+        if needs_explanation and not any(step.agent == "OperationAgent" for step in steps):
+            steps.append(SupervisorStep(
+                agent="OperationAgent",
+                tools=("analyze_operation",),
+                reason="解释型问题需要补充施工响应异常的证据。",
+            ))
+
+        if context.follow_up and not steps and inherited_agents:
+            for agent_name in inherited_agents:
+                if agent_name == "GeologyAgent":
+                    steps.append(SupervisorStep(
+                        agent="GeologyAgent",
+                        tools=("analyze_geology", "analyze_forward_risk"),
+                        reason="当前问题是追问，沿用上一轮地质上下文继续分析。",
+                    ))
+                elif agent_name == "OperationAgent":
+                    steps.append(SupervisorStep(
+                        agent="OperationAgent",
+                        tools=("analyze_operation",),
+                        reason="当前问题是追问，沿用上一轮施工状态上下文继续分析。",
+                    ))
+                elif agent_name == "TwinAgent":
+                    steps.append(SupervisorStep(
+                        agent="TwinAgent",
+                        tools=("get_digital_twin_state",),
+                        reason="当前问题是追问，补充数字孪生状态上下文。",
+                    ))
+                elif agent_name == "MemoryAgent":
+                    steps.append(SupervisorStep(
+                        agent="MemoryAgent",
+                        tools=("compare_history",),
+                        reason="当前问题是追问，补充历史对比上下文。",
+                    ))
 
         if not steps:
             steps.append(SupervisorStep(
@@ -289,12 +392,17 @@ class TBMSupervisorAgent:
         date: Optional[str],
         supervisor_plan: list[SupervisorStep],
         tool_results: list[dict[str, Any]],
+        context: ConversationContext,
     ) -> str:
         target = date or "最新可用日期"
         lines = [
             f"Supervisor 调度计划（{target}）："
             + " -> ".join(f"{step.agent}({', '.join(step.tools)})" for step in supervisor_plan)
         ]
+        if context.follow_up and context.last_user_query:
+            lines.append(f"已结合上一轮问题继续分析：{context.last_user_query}")
+        if context.last_focus_segment and self._has_any(query.lower(), list(FOLLOW_UP_MARKERS) + list(EXPLANATION_MARKERS)):
+            lines.append(f"当前追问焦点区段：{context.last_focus_segment}")
 
         for item in tool_results:
             agent = item.get("agent", "")
@@ -396,6 +504,134 @@ class TBMSupervisorAgent:
             f"{agent}: 有历史记录={comparison.get('has_history', False)}，对比记录数={comparison.get('history_count', 0)}。",
             comparison.get("comparison_text", ""),
         ]
+
+    @classmethod
+    def _load_context(cls, session_id: str, history_limit: int) -> ConversationContext:
+        messages = load_agent_messages(session_id, limit=max(2, history_limit * 2))
+        last_user_query = None
+        last_answer = None
+        last_date = None
+        last_routed_agents: tuple[str, ...] = ()
+        last_highlights: dict[str, Any] | None = None
+        last_focus_segment = None
+        last_forward_level = None
+
+        for item in reversed(messages):
+            payload = item.get("payload", {})
+            if item.get("role") == "assistant" and last_answer is None:
+                last_answer = str(payload.get("answer", "")).strip() or None
+                last_date = payload.get("date") or last_date
+                last_routed_agents = tuple(payload.get("routed_agents", []) or ())
+                last_highlights = payload.get("highlights") or {}
+                last_focus_segment = (
+                    (last_highlights or {}).get("top_coupling_segment")
+                    or (last_highlights or {}).get("focused_segment")
+                )
+                last_forward_level = (last_highlights or {}).get("forward_advice_level")
+            if item.get("role") == "user" and last_user_query is None:
+                last_user_query = str(payload.get("query", "")).strip() or None
+                last_date = payload.get("date") or last_date
+            if last_user_query and last_answer:
+                break
+
+        return ConversationContext(
+            session_id=session_id,
+            messages=tuple(messages),
+            last_user_query=last_user_query,
+            last_answer=last_answer,
+            last_date=last_date,
+            last_routed_agents=last_routed_agents,
+            last_highlights=last_highlights,
+            last_focus_segment=last_focus_segment,
+            last_forward_level=last_forward_level,
+        )
+
+    @classmethod
+    def _normalize_query(
+        cls,
+        query: str,
+        context: ConversationContext,
+        selected_date: Optional[str],
+    ) -> str:
+        normalized = query.strip()
+        lower_query = normalized.lower()
+        follow_up = bool(context.last_user_query and cls._is_follow_up(lower_query))
+
+        context_bits = []
+        if selected_date and selected_date not in normalized:
+            context_bits.append(f"参考时间 {selected_date}")
+        if follow_up and context.last_user_query:
+            context_bits.append(f"上一轮问题 {context.last_user_query}")
+        if follow_up and context.last_focus_segment:
+            context_bits.append(f"上一轮重点区段 {context.last_focus_segment}")
+        if follow_up and context.last_forward_level:
+            context_bits.append(f"上一轮前方风险等级 {context.last_forward_level}")
+
+        if not context_bits:
+            return normalized
+
+        return normalized + "。上下文：" + "；".join(context_bits) + "。"
+
+    @classmethod
+    def _context_summary(cls, context: ConversationContext, selected_date: Optional[str]) -> dict[str, Any]:
+        return {
+            "session_id": context.session_id,
+            "message_count": len(context.messages),
+            "has_history": bool(context.messages),
+            "inherited_date": selected_date if selected_date == context.last_date else context.last_date,
+            "last_user_query": context.last_user_query,
+            "last_focus_segment": context.last_focus_segment,
+            "last_forward_level": context.last_forward_level,
+            "last_routed_agents": list(context.last_routed_agents),
+            "follow_up_used": context.follow_up,
+        }
+
+    @classmethod
+    def _persist_turn(
+        cls,
+        session_id: str,
+        query: str,
+        selected_date: Optional[str],
+        payload: dict[str, Any],
+    ) -> None:
+        title = query[:40]
+        session_payload = {
+            "last_date": selected_date,
+            "last_query": query,
+            "last_routed_agents": payload.get("routed_agents", []),
+            "last_highlights": payload.get("highlights", {}),
+        }
+        append_agent_message(
+            session_id=session_id,
+            role="user",
+            payload={
+                "query": query,
+                "date": selected_date,
+            },
+            session_title=title,
+            session_payload=session_payload,
+        )
+        append_agent_message(
+            session_id=session_id,
+            role="assistant",
+            payload=payload,
+            session_title=title,
+            session_payload=session_payload,
+        )
+
+    @classmethod
+    def _is_follow_up(cls, lower_query: str) -> bool:
+        return cls._has_any(lower_query, list(FOLLOW_UP_MARKERS))
+
+    @classmethod
+    def _inherit_agents_from_context(
+        cls,
+        lower_query: str,
+        context: ConversationContext,
+    ) -> list[str]:
+        if not context.last_routed_agents or not cls._is_follow_up(lower_query):
+            return []
+        return list(context.last_routed_agents)
 
     @classmethod
     def _compact_agent_results(cls, agent_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -602,11 +838,22 @@ class TBMSupervisorAgent:
         return highlights
 
     @staticmethod
-    def _polish_with_llm(query: str, draft_answer: str) -> str:
+    def _polish_with_llm(
+        query: str,
+        draft_answer: str,
+        context: ConversationContext,
+    ) -> str:
+        memory_hint = ""
+        if context.last_user_query:
+            memory_hint = (
+                f"Previous user query: {context.last_user_query}\n"
+                f"Previous focus segment: {context.last_focus_segment or '--'}\n\n"
+            )
         prompt = (
             "You are a TBM multi-agent supervisor. Rewrite the draft answer in concise Chinese, "
             "preserving all numbers, agent routing, and caveats.\n\n"
-            f"User question:\n{query}\n\n"
+            + memory_hint
+            + f"User question:\n{query}\n\n"
             f"Draft answer:\n{draft_answer}\n"
         )
         return call_llm(prompt)
