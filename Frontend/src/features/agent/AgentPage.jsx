@@ -425,17 +425,18 @@ function MessageBubble({ message }) {
 }
 
 function ToolTrace({ item }) {
-  const summary = item.summary || {};
+  const resolved = normalizeToolTraceItem(item);
+  const summary = resolved.summary || {};
   return (
     <div style={styles.traceCard}>
       <div style={styles.traceHeader}>
-        <span style={styles.traceAgent}>{item.agent}</span>
-        <span style={styles.traceTool}>{item.tool}</span>
-        <span style={item.success ? styles.traceOk : styles.traceFail}>
-          {item.success ? "成功" : "失败"}
+        <span style={styles.traceAgent}>{resolved.agent}</span>
+        <span style={styles.traceTool}>{resolved.tool}</span>
+        <span style={resolved.success ? styles.traceOk : styles.traceFail}>
+          {resolved.success ? "成功" : "失败"}
         </span>
       </div>
-      {item.message && <div style={styles.traceMessage}>{item.message}</div>}
+      {resolved.message && <div style={styles.traceMessage}>{resolved.message}</div>}
       {Object.keys(summary).length > 0 && (
         <div style={styles.summaryGrid}>
           {Object.entries(summary).map(([key, value]) => (
@@ -448,6 +449,105 @@ function ToolTrace({ item }) {
       )}
     </div>
   );
+}
+
+function normalizeToolTraceItem(item = {}) {
+  const nested = item.result || {};
+  const success = typeof item.success === "boolean" ? item.success : !!nested.success;
+  const message = item.message || nested.message || "";
+  const summary =
+    item.summary ||
+    buildSummaryFromVerboseData(item.tool || nested.tool, nested.data || {});
+
+  return {
+    agent: item.agent || nested.agent || "--",
+    tool: item.tool || nested.tool || "--",
+    success,
+    message,
+    summary,
+  };
+}
+
+function buildSummaryFromVerboseData(tool, data) {
+  if (!data || typeof data !== "object") return {};
+
+  if (tool === "analyze_day") {
+    return {
+      date: data.date,
+      operation: data.operation,
+      geology: data.geology,
+      forward_risk: data.forward_risk,
+      coupling: data.coupling,
+    };
+  }
+
+  if (tool === "analyze_forward_risk") {
+    return {
+      date: data.date,
+      forward_risk: data.forward_risk,
+      forward_risk_text: data.forward_risk_text,
+    };
+  }
+
+  if (tool === "analyze_operation") {
+    return {
+      date: data.date,
+      stats: data.stats,
+      state_stats: data.state_stats,
+    };
+  }
+
+  if (tool === "analyze_geology") {
+    return {
+      date: data.date,
+      segment_summary: data.segment_summary,
+      coupling_summary: data.coupling_summary,
+      segment_count: data.segment_count,
+    };
+  }
+
+  if (tool === "analyze_gas") {
+    return {
+      date: data.date,
+      exceed_types: data.exceed_types,
+      gas_stats: data.gas_stats,
+    };
+  }
+
+  if (tool === "get_digital_twin_state") {
+    return {
+      date: data.date,
+      digital_twin_state: data.digital_twin_state,
+    };
+  }
+
+  if (tool === "compare_history") {
+    return {
+      date: data.date,
+      history_comparison: data.history_comparison,
+    };
+  }
+
+  if (tool === "risk_profile") {
+    return {
+      date: data.date,
+      risk_profile: data.risk_profile,
+      speed_profile_count: Array.isArray(data.speed_profile) ? data.speed_profile.length : 0,
+    };
+  }
+
+  if (tool === "load_day") {
+    return data;
+  }
+
+  if (tool === "list_dates") {
+    return {
+      date_count: Array.isArray(data.dates) ? data.dates.length : 0,
+      preview_dates: Array.isArray(data.dates) ? data.dates.slice(0, 8) : [],
+    };
+  }
+
+  return data;
 }
 
 function Toggle({ checked, onChange, label }) {

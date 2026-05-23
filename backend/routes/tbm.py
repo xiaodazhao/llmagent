@@ -1,6 +1,7 @@
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Optional
 
 import pandas as pd
@@ -43,6 +44,7 @@ DAILY_ANALYSIS_CACHE_NAMESPACE = "tbm_daily_analysis"
 # Backward compatibility for summaries persisted before the UTF-8 cleanup.
 LEGACY_VALID_SAMPLE_KEYS = ["有效状态样本数", "鏈夋晥鐘舵€佹牱鏈暟"]
 LEGACY_STATE_CONFIG_KEYS = ["状态识别配置", "鐘舵€佽瘑鍒厤缃�"]
+DEBUG_PREFIX = "[TBM DEBUG]"
 
 
 def _date_from_csv_path(path: Path) -> str | None:
@@ -84,6 +86,32 @@ def _stringify_dict_keys(value: Any) -> Any:
     if isinstance(value, list):
         return [_stringify_dict_keys(item) for item in value]
     return value
+
+
+def _debug_log(event: str, **fields: Any) -> None:
+    ordered = []
+    for key, value in fields.items():
+        if value is None:
+            continue
+        ordered.append(f"{key}={value}")
+    suffix = f" | {'; '.join(ordered)}" if ordered else ""
+    print(f"{DEBUG_PREFIX} {event}{suffix}")
+
+
+def _debug_start(feature: str, **fields: Any) -> float:
+    started = perf_counter()
+    _debug_log(f"{feature}.start", **fields)
+    return started
+
+
+def _debug_success(feature: str, started: float, **fields: Any) -> None:
+    duration_ms = round((perf_counter() - started) * 1000, 1)
+    _debug_log(f"{feature}.success", duration_ms=duration_ms, **fields)
+
+
+def _debug_failure(feature: str, started: float, exc: Exception, **fields: Any) -> None:
+    duration_ms = round((perf_counter() - started) * 1000, 1)
+    _debug_log(f"{feature}.failure", duration_ms=duration_ms, error=str(exc), **fields)
 
 
 def _build_summary_payload(result: dict) -> dict:
@@ -283,6 +311,7 @@ def register_tbm_routes(
 
     @router.get("/dates", response_model=ApiEnvelope[DatesPayload])
     def get_available_dates():
+        started = _debug_start("dates")
         try:
             dates = []
             for file_path in get_all_csv_paths():
@@ -290,13 +319,23 @@ def register_tbm_routes(
                 if parsed:
                     dates.append(parsed)
             dates.sort(reverse=True)
+            _debug_success("dates", started, count=len(dates), latest=dates[0] if dates else None)
             return api_success({"dates": dates})
         except Exception as exc:
+            _debug_failure("dates", started, exc)
             return _internal_error("日期列表加载失败", exc)
 
     @router.post("/agent_v2")
     def run_tbm_supervisor_agent(req: AgentRequest):
-        return tbm_supervisor_agent.run(
+        started = _debug_start(
+            "agent_v2",
+            date=req.date,
+            session_id=req.session_id,
+            use_llm=req.use_llm,
+            verbose=req.verbose,
+            query=req.query[:80],
+        )
+        result = tbm_supervisor_agent.run(
             query=req.query,
             date=req.date,
             session_id=req.session_id,
@@ -304,16 +343,42 @@ def register_tbm_routes(
             use_llm=req.use_llm,
             verbose=req.verbose,
         )
+        if result.get("success"):
+            data = result.get("data") or {}
+            _debug_success(
+                "agent_v2",
+                started,
+                routed_agents=",".join(data.get("routed_agents", [])),
+                session_id=data.get("session_id"),
+                resolved_date=data.get("date"),
+            )
+        else:
+            _debug_log(
+                "agent_v2.failure",
+                duration_ms=round((perf_counter() - started) * 1000, 1),
+                error=result.get("message"),
+                session_id=req.session_id,
+            )
+        return result
 
     @router.get("/agent_v2/capabilities")
     def tbm_supervisor_agent_capabilities():
-        return tbm_supervisor_agent.capabilities()
+        started = _debug_start("agent_v2.capabilities")
+        payload = tbm_supervisor_agent.capabilities()
+        _debug_success(
+            "agent_v2.capabilities",
+            started,
+            agent_count=len(payload.get("agents", [])),
+        )
+        return payload
 
     @router.get("/agent_v2/session", response_model=ApiEnvelope[AgentSessionPayload])
     def tbm_supervisor_agent_session(session_id: str, limit: int = 30):
+        started = _debug_start("agent_v2.session", session_id=session_id, limit=limit)
         try:
             session = load_agent_session(session_id)
             if not session:
+                _debug_success("agent_v2.session", started, session_id=session_id, message_count=0)
                 return api_success(
                     {
                         "session_id": session_id,
@@ -331,12 +396,27 @@ def register_tbm_routes(
                 "updated_at": session.get("updated_at"),
                 "messages": load_agent_messages(session_id, limit=limit),
             }
+            _debug_success(
+                "agent_v2.session",
+                started,
+                session_id=session_id,
+                message_count=len(payload["messages"]),
+            )
             return api_success(payload)
         except Exception as exc:
+            _debug_failure("agent_v2.session", started, exc, session_id=session_id, limit=limit)
             return _internal_error("问答会话加载失败", exc, meta={"session_id": session_id, "limit": limit})
 
     @router.post("/evidence/import", response_model=ApiEnvelope[EvidenceImportPayload])
     def import_evidence_api(req: EvidenceImportRequest):
+        started = _debug_start(
+            "evidence.import",
+            path_count=len(req.paths),
+            source_type=req.source_type,
+            dry_run=req.dry_run,
+            replace_existing=req.replace_existing,
+            recursive=req.recursive,
+        )
         try:
             result = import_evidence_files(
                 paths=req.paths,
@@ -346,14 +426,25 @@ def register_tbm_routes(
                 recursive=req.recursive,
             )
             warnings = [item.get("error", "") for item in result.get("errors", []) if item.get("error")]
+            _debug_success(
+                "evidence.import",
+                started,
+                parsed_record_count=result.get("parsed_record_count"),
+                inserted_count=result.get("inserted_count"),
+                replaced_count=result.get("replaced_count"),
+                error_count=len(result.get("errors", [])),
+            )
             return api_success(result, warnings=warnings)
         except FileNotFoundError as exc:
+            _debug_failure("evidence.import", started, exc)
             return api_error(str(exc), status_code=404, error_code="IMPORT_PATH_NOT_FOUND")
         except Exception as exc:
+            _debug_failure("evidence.import", started, exc)
             return _internal_error("证据库导入失败", exc)
 
     @router.post("/report", response_model=ApiEnvelope[ReportPayload])
     def generate_daily_report(req: DailyReportRequest):
+        started = _debug_start("report.daily", date=req.date)
         try:
             _, result, warnings, meta, _ = _get_daily_analysis(req.date)
             current_record = build_history_record(req.date, result)
@@ -377,54 +468,113 @@ def register_tbm_routes(
                 risk_prob_text=result["risk_prob_text"],
             )
 
-            return api_success({"report": call_llm(prompt)}, warnings=warnings, meta=meta)
+            report = call_llm(prompt)
+            _debug_success(
+                "report.daily",
+                started,
+                date=req.date,
+                warning_count=len(warnings),
+                cache_hit=meta.get("cache_hit"),
+            )
+            return api_success({"report": report}, warnings=warnings, meta=meta)
         except FileNotFoundError as exc:
+            _debug_failure("report.daily", started, exc, date=req.date)
             return api_error(str(exc), status_code=404, error_code="DATA_FILE_NOT_FOUND")
         except Exception as exc:
+            _debug_failure("report.daily", started, exc, date=req.date)
             return _internal_error("日报生成失败", exc, meta={"requested_date": req.date})
 
     @router.get("/summary", response_model=ApiEnvelope[SummaryPayload])
     def tbm_summary(date: Optional[str] = None):
+        started = _debug_start("summary", date=date)
         try:
             _, result, warnings, meta, _ = _get_daily_analysis(date)
-            return api_success(_build_summary_payload(result), warnings=warnings, meta=meta)
+            payload = _build_summary_payload(result)
+            _debug_success(
+                "summary",
+                started,
+                date=meta.get("resolved_date"),
+                cache_hit=meta.get("cache_hit"),
+                work_total_min=payload.get("work_total_min"),
+                stop_total_min=payload.get("stop_total_min"),
+            )
+            return api_success(payload, warnings=warnings, meta=meta)
         except FileNotFoundError as exc:
+            _debug_failure("summary", started, exc, date=date)
             return api_error(str(exc), status_code=404, error_code="DATA_FILE_NOT_FOUND")
         except Exception as exc:
+            _debug_failure("summary", started, exc, date=date)
             return _internal_error("概览数据加载失败", exc, meta={"requested_date": date})
 
     @router.get("/state", response_model=ApiEnvelope[StatePayload])
     def state_api(date: Optional[str] = None):
+        started = _debug_start("state", date=date)
         try:
             _, result, warnings, meta, _ = _get_daily_analysis(date)
-            return api_success(_build_state_payload(result), warnings=warnings, meta=meta)
+            payload = _build_state_payload(result)
+            _debug_success(
+                "state",
+                started,
+                date=meta.get("resolved_date"),
+                cache_hit=meta.get("cache_hit"),
+                segment_count=len(payload.get("segments", [])),
+                valid_samples=payload.get("valid_samples"),
+            )
+            return api_success(payload, warnings=warnings, meta=meta)
         except FileNotFoundError as exc:
+            _debug_failure("state", started, exc, date=date)
             return api_error(str(exc), status_code=404, error_code="DATA_FILE_NOT_FOUND")
         except Exception as exc:
+            _debug_failure("state", started, exc, date=date)
             return _internal_error("施工状态数据加载失败", exc, meta={"requested_date": date})
 
     @router.get("/gas", response_model=ApiEnvelope[dict[str, Any]])
     def gas_api(date: Optional[str] = None):
+        started = _debug_start("gas", date=date)
         try:
             _, result, warnings, meta, _ = _get_daily_analysis(date)
-            return api_success(result["gas_stats"], warnings=warnings, meta=meta)
+            gas_stats = result["gas_stats"]
+            _debug_success(
+                "gas",
+                started,
+                date=meta.get("resolved_date"),
+                cache_hit=meta.get("cache_hit"),
+                gas_types=len((gas_stats.get("all") or {})) if isinstance(gas_stats, dict) else None,
+            )
+            return api_success(gas_stats, warnings=warnings, meta=meta)
         except FileNotFoundError as exc:
+            _debug_failure("gas", started, exc, date=date)
             return api_error(str(exc), status_code=404, error_code="DATA_FILE_NOT_FOUND")
         except Exception as exc:
+            _debug_failure("gas", started, exc, date=date)
             return _internal_error("气体监测数据加载失败", exc, meta={"requested_date": date})
 
     @router.get("/geology", response_model=ApiEnvelope[GeologyPayload])
     def geology_api(date: Optional[str] = None):
+        started = _debug_start("geology", date=date)
         try:
             _, result, warnings, meta, _ = _get_daily_analysis(date)
-            return api_success(_build_geology_payload(result), warnings=warnings, meta=meta)
+            payload = _build_geology_payload(result)
+            segment_summary = payload.get("segment_summary", {})
+            _debug_success(
+                "geology",
+                started,
+                date=meta.get("resolved_date"),
+                cache_hit=meta.get("cache_hit"),
+                has_geology=segment_summary.get("has_geology"),
+                high_risk_segment_count=segment_summary.get("high_risk_segment_count"),
+            )
+            return api_success(payload, warnings=warnings, meta=meta)
         except FileNotFoundError as exc:
+            _debug_failure("geology", started, exc, date=date)
             return api_error(str(exc), status_code=404, error_code="DATA_FILE_NOT_FOUND")
         except Exception as exc:
+            _debug_failure("geology", started, exc, date=date)
             return _internal_error("地质融合数据加载失败", exc, meta={"requested_date": date})
 
     @router.get("/digital_twin_state", response_model=ApiEnvelope[DigitalTwinPayload])
     def digital_twin_state_api(date: Optional[str] = None):
+        started = _debug_start("digital_twin_state", date=date)
         try:
             _, result, warnings, meta, resolved_date = _get_daily_analysis(date)
             payload = {
@@ -432,22 +582,40 @@ def register_tbm_routes(
                 "digital_twin_state": serialize_for_json(result.get("digital_twin_state", {})),
                 "coupling_summary": serialize_for_json(result.get("coupling_summary", {})),
             }
+            _debug_success(
+                "digital_twin_state",
+                started,
+                date=resolved_date,
+                cache_hit=meta.get("cache_hit"),
+            )
             return api_success(payload, warnings=warnings, meta=meta)
         except FileNotFoundError as exc:
+            _debug_failure("digital_twin_state", started, exc, date=date)
             return api_error(str(exc), status_code=404, error_code="DATA_FILE_NOT_FOUND")
         except Exception as exc:
+            _debug_failure("digital_twin_state", started, exc, date=date)
             return _internal_error("数字孪生状态加载失败", exc, meta={"requested_date": date})
 
     @router.get("/history_memory", response_model=ApiEnvelope[HistoryMemoryPayload])
     def history_memory_api(date: Optional[str] = None, limit: int = 10):
+        started = _debug_start("history_memory", date=date, limit=limit)
         try:
             _, result, warnings, meta, resolved_date = _get_daily_analysis(date)
             current_date = resolved_date or date or datetime.now().strftime("%Y-%m-%d")
             payload = _build_history_payload(current_date, result, limit)
+            _debug_success(
+                "history_memory",
+                started,
+                date=current_date,
+                cache_hit=meta.get("cache_hit"),
+                history_count=payload.get("history_comparison", {}).get("history_count"),
+            )
             return api_success(payload, warnings=warnings, meta=meta)
         except FileNotFoundError as exc:
+            _debug_failure("history_memory", started, exc, date=date, limit=limit)
             return api_error(str(exc), status_code=404, error_code="DATA_FILE_NOT_FOUND")
         except Exception as exc:
+            _debug_failure("history_memory", started, exc, date=date, limit=limit)
             return _internal_error("历史记忆加载失败", exc, meta={"requested_date": date, "limit": limit})
 
     @router.post("/report_by_time", response_model=ApiEnvelope[ReportPayload])
@@ -460,12 +628,14 @@ def register_tbm_routes(
             "start_time": start,
             "end_time": end,
         }
+        started = _debug_start("report.time_window", **meta)
 
         try:
             _, df_day = load_csv_by_date(date)
             df = load_df_by_time(df_day, start, end)
 
             if df.empty:
+                _debug_log("report.time_window.empty", **meta)
                 return api_error(
                     "该时间段无数据。",
                     status_code=404,
@@ -487,18 +657,29 @@ def register_tbm_routes(
                 llm_summary=result["llm_summary"],
             )
 
+            report = call_llm(prompt)
+            _debug_success(
+                "report.time_window",
+                started,
+                date=date,
+                row_count=len(df),
+                warning_count=len(_collect_warnings(result)),
+            )
             return api_success(
-                {"report": call_llm(prompt)},
+                {"report": report},
                 warnings=_collect_warnings(result),
                 meta=meta,
             )
         except FileNotFoundError as exc:
+            _debug_failure("report.time_window", started, exc, **meta)
             return api_error(str(exc), status_code=404, meta=meta, error_code="DATA_FILE_NOT_FOUND")
         except Exception as exc:
+            _debug_failure("report.time_window", started, exc, **meta)
             return _internal_error("时间段报告生成失败", exc, meta=meta)
 
     @router.get("/risk_profile", response_model=ApiEnvelope[RiskProfilePayload])
     def risk_profile_api(date: Optional[str] = None):
+        started = _debug_start("risk_profile", date=date)
         try:
             _, result, warnings, meta, resolved_date = _get_daily_analysis(date)
             payload = {
@@ -506,10 +687,19 @@ def register_tbm_routes(
                 "risk_profile": build_risk_profile(result["df_geo"]),
                 "speed_profile": build_speed_profile(result["df_geo"]),
             }
+            _debug_success(
+                "risk_profile",
+                started,
+                date=resolved_date,
+                cache_hit=meta.get("cache_hit"),
+                speed_profile_count=len(payload["speed_profile"]),
+            )
             return api_success(payload, warnings=warnings, meta=meta)
         except FileNotFoundError as exc:
+            _debug_failure("risk_profile", started, exc, date=date)
             return api_error(str(exc), status_code=404, error_code="DATA_FILE_NOT_FOUND")
         except Exception as exc:
+            _debug_failure("risk_profile", started, exc, date=date)
             return _internal_error("空间风险剖面加载失败", exc, meta={"requested_date": date})
 
     app.include_router(router)

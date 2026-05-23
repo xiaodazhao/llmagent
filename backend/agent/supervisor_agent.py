@@ -16,6 +16,7 @@ from services.sqlite_storage_service import (
 
 
 DATE_RE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
+DEBUG_PREFIX = "[TBM AGENT]"
 FOLLOW_UP_MARKERS = (
     "继续",
     "展开",
@@ -55,6 +56,16 @@ class ConversationContext:
     last_focus_segment: str | None = None
     last_forward_level: str | None = None
     follow_up: bool = False
+
+
+def _agent_log(event: str, **fields: Any) -> None:
+    ordered = []
+    for key, value in fields.items():
+        if value is None:
+            continue
+        ordered.append(f"{key}={value}")
+    suffix = f" | {'; '.join(ordered)}" if ordered else ""
+    print(f"{DEBUG_PREFIX} {event}{suffix}")
 
 
 class DomainAgent:
@@ -185,6 +196,14 @@ class TBMSupervisorAgent:
         selected_date = date or self._extract_date(query) or context.last_date
         effective_query = self._normalize_query(query, context, selected_date)
         supervisor_plan = self._plan(effective_query, context)
+        _agent_log(
+            "run.start",
+            session_id=active_session_id,
+            selected_date=selected_date,
+            follow_up=context.follow_up,
+            query=query[:80],
+            plan=" -> ".join(f"{step.agent}({', '.join(step.tools)})" for step in supervisor_plan),
+        )
         self.tools.clear_cache()
 
         agent_results = []
@@ -198,6 +217,13 @@ class TBMSupervisorAgent:
                     failed_agent=step.agent,
                 )
 
+            _agent_log(
+                "dispatch",
+                session_id=active_session_id,
+                agent=step.agent,
+                tools=",".join(step.tools),
+                reason=step.reason,
+            )
             result = agent.run(list(step.tools), selected_date)
             agent_results.append({
                 "agent": step.agent,
@@ -208,6 +234,12 @@ class TBMSupervisorAgent:
             flat_tool_results.extend((result.get("data") or {}).get("tool_results", []))
 
             if not result.get("success"):
+                _agent_log(
+                    "dispatch.failure",
+                    session_id=active_session_id,
+                    agent=step.agent,
+                    error=result.get("message"),
+                )
                 return fail(
                     result.get("message", "agent failed"),
                     tool="tbm_supervisor_agent",
@@ -257,6 +289,13 @@ class TBMSupervisorAgent:
             query=query,
             selected_date=selected_date,
             payload=payload,
+        )
+        _agent_log(
+            "run.success",
+            session_id=active_session_id,
+            selected_date=selected_date,
+            routed_agents=",".join(payload["routed_agents"]),
+            message_count=len(context.messages) + 2,
         )
 
         return ok(
