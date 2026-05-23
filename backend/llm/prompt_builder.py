@@ -10,6 +10,7 @@ def build_prompt(
     llm_summary: dict,
     risk_prob_text: str
 ) -> str:
+    """Build prompt."""
     return f"""
 你现在需要直接编写一份正式的《TBM综合施工工况分析报告》。
 

@@ -8,10 +8,11 @@ import pdfplumber
 import fitz
 
 from schemas.schemas import EvidenceRecord
-from utils.utils import mileage_to_num
+from utils.chainage_utils import mileage_to_num
 
 
 def _norm_text(text: str) -> str:
+    """Internal helper for norm text."""
     if not text:
         return ""
     text = text.replace("\u3000", " ")
@@ -23,6 +24,7 @@ def _norm_text(text: str) -> str:
 
 
 def _flat_text(text: str) -> str:
+    """Internal helper for flat text."""
     text = _norm_text(text)
     text = text.replace("\n", "")
     text = re.sub(r"\s+", "", text)
@@ -30,11 +32,13 @@ def _flat_text(text: str) -> str:
 
 
 def _safe_search(pattern: str, text: str, flags=re.S) -> Optional[str]:
+    """Safely search text with a regex pattern."""
     m = re.search(pattern, text, flags)
     return m.group(1).strip() if m else None
 
 
 def _safe_mileage(x: Optional[str]) -> Optional[float]:
+    """Safely convert mileage text into a numeric chainage."""
     if not x:
         return None
     try:
@@ -44,6 +48,7 @@ def _safe_mileage(x: Optional[str]) -> Optional[float]:
 
 
 def _extract_meta_from_text(text: str, pdf_name: str) -> Dict[str, Any]:
+    """Extract meta from text."""
     t = _norm_text(text)
 
     report_id = pdf_name.replace(".pdf", "")
@@ -78,6 +83,7 @@ def _extract_meta_from_text(text: str, pdf_name: str) -> Dict[str, Any]:
 
 
 def _parse_range_cell(text: str):
+    """Parse range cell."""
     if not text:
         return None
 
@@ -95,6 +101,7 @@ def _parse_range_cell(text: str):
 
 
 def _infer_anomaly_level(text: str) -> str:
+    """Infer anomaly level."""
     flat = _flat_text(text)
 
     # 顺序非常关键：先判断“未见”
@@ -108,6 +115,7 @@ def _infer_anomaly_level(text: str) -> str:
 
 
 def _extract_support_grade(text: str) -> Optional[str]:
+    """Extract support grade."""
     flat = _flat_text(text)
     m = re.search(r"([ⅠⅡⅢⅣⅤIVX]+)级围岩", flat)
     if m:
@@ -116,6 +124,7 @@ def _extract_support_grade(text: str) -> Optional[str]:
 
 
 def _extract_joint_degree(text: str) -> Optional[str]:
+    """Extract joint degree."""
     flat = _flat_text(text)
     if "节理裂隙发育密集" in flat:
         return "发育密集"
@@ -127,6 +136,7 @@ def _extract_joint_degree(text: str) -> Optional[str]:
 
 
 def _extract_rock_mass_state(text: str) -> Optional[str]:
+    """Extract rock mass state."""
     flat = _flat_text(text)
     if "岩体破碎-极破碎" in flat or "岩体破碎极破碎" in flat:
         return "破碎-极破碎"
@@ -140,6 +150,7 @@ def _extract_rock_mass_state(text: str) -> Optional[str]:
 
 
 def _extract_weathering(text: str) -> Optional[str]:
+    """Extract weathering."""
     flat = _flat_text(text)
     for x in ["全风化", "强风化", "弱风化", "微风化", "未风化"]:
         if x in flat:
@@ -148,6 +159,7 @@ def _extract_weathering(text: str) -> Optional[str]:
 
 
 def _extract_rock_uniformity(text: str) -> Optional[str]:
+    """Extract rock uniformity."""
     flat = _flat_text(text)
     if "软硬不均" in flat:
         return "软硬不均"
@@ -155,6 +167,7 @@ def _extract_rock_uniformity(text: str) -> Optional[str]:
 
 
 def _extract_stability(text: str) -> Optional[str]:
+    """Extract stability."""
     flat = _flat_text(text)
     if "围岩整体稳定性差" in flat or "围岩整体稳定性较差" in flat or "围岩自稳性差" in flat:
         return "较差"
@@ -164,6 +177,7 @@ def _extract_stability(text: str) -> Optional[str]:
 
 
 def _extract_lithology(text: str) -> Optional[str]:
+    """Extract lithology."""
     flat = _flat_text(text)
     if "板岩夹变质砂岩" in flat:
         return "板岩夹变质砂岩"
@@ -171,6 +185,7 @@ def _extract_lithology(text: str) -> Optional[str]:
 
 
 def _extract_collapse_info(risk_hint: str, conclusion: str):
+    """Extract collapse info."""
     flat_hint = _flat_text(risk_hint or "")
     flat_conc = _flat_text(conclusion or "")
     flat = flat_hint + flat_conc
@@ -195,6 +210,7 @@ def _infer_risk_level(
     support_grade: Optional[str],
     rock_mass_state: Optional[str]
 ) -> str:
+    """Infer risk level."""
     if anomaly_level == "strong" or collapse_flag == 1 or rock_mass_state in {"破碎-极破碎", "极破碎"}:
         return "high"
     if anomaly_level == "medium" or support_grade == "Ⅴ" or rock_mass_state in {"破碎", "较破碎"}:
@@ -209,6 +225,7 @@ def _build_risk_tags(
     rock_mass_state: Optional[str],
     support_grade: Optional[str]
 ):
+    """Build risk tags."""
     tags = []
 
     if anomaly_level == "strong":
@@ -242,6 +259,7 @@ def _build_risk_tags(
 
 
 def _score_range_cell(text: str) -> int:
+    """Internal helper for score range cell."""
     flat = _flat_text(text)
     if re.search(r"DyK\d+\+\d+\.?\d*", flat) and "~" in flat:
         return 3
@@ -249,24 +267,28 @@ def _score_range_cell(text: str) -> int:
 
 
 def _score_detect_cell(text: str) -> int:
+    """Internal helper for score detect cell."""
     flat = _flat_text(text)
     keys = ["未见明显反射异常", "较明显反射异常", "明显反射异常", "反射异常"]
     return sum(1 for k in keys if k in flat)
 
 
 def _score_conclusion_cell(text: str) -> int:
+    """Internal helper for score conclusion cell."""
     flat = _flat_text(text)
     keys = ["围岩", "岩性", "弱风化", "软硬不均", "裂隙", "岩体", "稳定性", "变差", "变好", "掌子面相当"]
     return sum(1 for k in keys if k in flat)
 
 
 def _score_risk_hint_cell(text: str) -> int:
+    """Internal helper for score risk hint cell."""
     flat = _flat_text(text)
     keys = ["掉块风险", "附近有掉块", "风险提示"]
     return sum(1 for k in keys if k in flat)
 
 
 def _score_grade_cell(text: str) -> int:
+    """Internal helper for score grade cell."""
     flat = _flat_text(text)
     if re.search(r"[ⅠⅡⅢⅣⅤIVX]+级围岩", flat):
         return 3
@@ -274,6 +296,7 @@ def _score_grade_cell(text: str) -> int:
 
 
 def _pick_cells_from_row(row: List[str]) -> Dict[str, str]:
+    """Internal helper for pick cells from row."""
     cells = [("" if c is None else str(c).strip()) for c in row]
     non_empty = [c for c in cells if c]
 
@@ -296,6 +319,7 @@ def _pick_cells_from_row(row: List[str]) -> Dict[str, str]:
 
 
 def _is_valid_hsp_row(picked: Dict[str, str]) -> bool:
+    """Internal helper for is valid hsp row."""
     range_text = picked.get("range", "") or ""
     detect_text = picked.get("detect", "") or ""
     conclusion_text = picked.get("conclusion", "") or ""
@@ -334,6 +358,7 @@ def _is_valid_hsp_row(picked: Dict[str, str]) -> bool:
 
 
 def _parse_hsp_row_to_record(row_data: Dict[str, str], meta: Dict[str, Any], idx: int) -> Optional[EvidenceRecord]:
+    """Parse hsp row to record."""
     range_info = _parse_range_cell(row_data.get("range", ""))
     if not range_info:
         return None
@@ -417,6 +442,7 @@ def _parse_hsp_row_to_record(row_data: Dict[str, str], meta: Dict[str, Any], idx
 
 
 def parse_hsp_pdf(pdf_path: Path) -> List[EvidenceRecord]:
+    """Parse hsp pdf."""
     doc = fitz.open(pdf_path)
     try:
         text = "\n".join([p.get_text() for p in doc])

@@ -245,6 +245,7 @@ def run_coupling_analysis(
 
 
 def _resolve_columns(df: pd.DataFrame, warnings: list[str]) -> dict[str, str | None]:
+    """Resolve columns."""
     resolved = {}
     for key, aliases in FIELD_ALIASES.items():
         resolved[key] = _find_column(df, aliases)
@@ -272,6 +273,7 @@ def _resolve_columns(df: pd.DataFrame, warnings: list[str]) -> dict[str, str | N
 
 
 def _find_column(df: pd.DataFrame, aliases: list[str]) -> str | None:
+    """Internal helper for find column."""
     lower_map = {str(col).strip().lower(): col for col in df.columns}
     for alias in aliases:
         key = alias.strip().lower()
@@ -287,6 +289,7 @@ def _find_column(df: pd.DataFrame, aliases: list[str]) -> str | None:
 
 
 def _prepare_raw_dataframe(df: pd.DataFrame, colmap: dict[str, str | None], segment_length: float) -> pd.DataFrame:
+    """Prepare raw dataframe."""
     out = df.copy()
     chainage_col = colmap["chainage"]
     out["chainage"] = pd.to_numeric(out[chainage_col], errors="coerce")
@@ -330,6 +333,7 @@ def _aggregate_segment_features(
     colmap: dict[str, str | None],
     warnings: list[str],
 ) -> pd.DataFrame:
+    """Internal helper for aggregate segment features."""
     grouped = df.groupby("segment_id", sort=False)
 
     out = grouped.agg(
@@ -414,12 +418,14 @@ def _aggregate_segment_features(
 
 
 def _add_response_anomaly_index(segment_df: pd.DataFrame, warnings: list[str]) -> pd.DataFrame:
+    """Internal helper for add response anomaly index."""
     out = segment_df.copy()
     idx = out.index
     score_cols: list[str] = []
     group_scores: dict[str, pd.Series] = {}
 
     def add_score(name: str, series: pd.Series, side: str, group: str) -> None:
+        """Handle add score."""
         score = _robust_score(series, side=side)
         out[name] = score
         score_cols.append(name)
@@ -530,6 +536,7 @@ def _add_response_anomaly_index(segment_df: pd.DataFrame, warnings: list[str]) -
 
 
 def _add_anomaly_pattern(segment_df: pd.DataFrame) -> pd.DataFrame:
+    """Internal helper for add anomaly pattern."""
     out = segment_df.copy()
     idx = out.index
 
@@ -643,6 +650,7 @@ def _compute_efficiency_anomaly(out: pd.DataFrame, warnings: list[str]) -> pd.Se
 
 
 def _ratio_series(series: pd.Series) -> pd.Series:
+    """Internal helper for ratio series."""
     values = pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan).fillna(0)
     max_value = values.max(skipna=True)
     if pd.notna(max_value) and max_value > 1.0 and max_value <= 100.0:
@@ -651,6 +659,7 @@ def _ratio_series(series: pd.Series) -> pd.Series:
 
 
 def _classify_anomaly_pattern(row: pd.Series) -> str:
+    """Classify anomaly pattern."""
     stop_score = float(row.get("stop_dominant", 0) or 0)
     efficiency_score = float(row.get("efficiency_drop", 0) or 0)
     high_load_score = float(row.get("high_load", 0) or 0)
@@ -675,6 +684,7 @@ def _classify_anomaly_pattern(row: pd.Series) -> str:
 
 
 def _volatility_pattern_score(out: pd.DataFrame, idx: pd.Index) -> pd.Series:
+    """Internal helper for volatility pattern score."""
     candidates = []
     for col in ["speed_volatility_score"]:
         if col in out.columns:
@@ -693,6 +703,7 @@ def _add_coupling_index(
     risk_threshold: float,
     response_threshold: float,
 ) -> pd.DataFrame:
+    """Internal helper for add coupling index."""
     out = segment_df.copy()
     grs = pd.to_numeric(out.get("GRS", 0), errors="coerce").fillna(0).clip(0, 1)
     rai = pd.to_numeric(out.get("RAI", 0), errors="coerce").fillna(0).clip(0, 1)
@@ -751,6 +762,7 @@ def _add_coupling_index(
 
 
 def _add_weak_validation_labels(segment_df: pd.DataFrame) -> pd.DataFrame:
+    """Internal helper for add weak validation labels."""
     out = segment_df.copy()
     reasons = []
     labels = []
@@ -776,6 +788,7 @@ def _add_weak_validation_labels(segment_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _validate_coupling(segment_df: pd.DataFrame, top_k: int) -> dict[str, Any]:
+    """Internal helper for validate coupling."""
     if segment_df is None or segment_df.empty:
         return _empty_validation()
 
@@ -812,6 +825,7 @@ def _validate_coupling(segment_df: pd.DataFrame, top_k: int) -> dict[str, Any]:
 
 
 def _build_high_attention(segment_df: pd.DataFrame, top_k: int) -> list[dict[str, Any]]:
+    """Build high attention."""
     if segment_df is None or segment_df.empty:
         return []
 
@@ -862,6 +876,7 @@ def _build_summary(
     warnings: list[str],
     grs_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Build summary."""
     if segment_df is None or segment_df.empty:
         return _empty_summary("no segment result", warnings)
 
@@ -918,6 +933,7 @@ def _write_outputs(
     output_prefix: str,
     warnings: list[str],
 ) -> dict[str, str]:
+    """Internal helper for write outputs."""
     if output_dir is None or segment_df is None or segment_df.empty:
         return {}
 
@@ -951,6 +967,7 @@ def _write_outputs(
 
 
 def _merge_with_base_segments(base_segment_df: pd.DataFrame | None, metric_df: pd.DataFrame) -> pd.DataFrame:
+    """Internal helper for merge with base segments."""
     if base_segment_df is None or base_segment_df.empty:
         return metric_df.copy()
     if metric_df is None or metric_df.empty:
@@ -980,12 +997,14 @@ def _merge_with_base_segments(base_segment_df: pd.DataFrame | None, metric_df: p
 
 
 def _has_segment_bounds(df: pd.DataFrame) -> bool:
+    """Internal helper for has segment bounds."""
     start_col = _first_existing(df, ["segment_start_first", "segment_start"])
     end_col = _first_existing(df, ["segment_end_first", "segment_end"])
     return bool(start_col and end_col)
 
 
 def _segment_merge_key(df: pd.DataFrame) -> pd.Series:
+    """Internal helper for segment merge key."""
     start_col = _first_existing(df, ["segment_start_first", "segment_start"])
     end_col = _first_existing(df, ["segment_end_first", "segment_end"])
     if start_col and end_col:
@@ -998,6 +1017,7 @@ def _segment_merge_key(df: pd.DataFrame) -> pd.Series:
 
 
 def _first_existing(df: pd.DataFrame, columns: list[str]) -> str | None:
+    """Internal helper for first existing."""
     for col in columns:
         if col in df.columns:
             return col
@@ -1005,6 +1025,7 @@ def _first_existing(df: pd.DataFrame, columns: list[str]) -> str | None:
 
 
 def _normalize_segment_id(value: Any) -> str:
+    """Normalize segment id."""
     parts = str(value).split("_")
     if len(parts) == 2:
         return f"{_number_key(parts[0])}_{_number_key(parts[1])}"
@@ -1012,6 +1033,7 @@ def _normalize_segment_id(value: Any) -> str:
 
 
 def _empty_summary(reason: str, warnings: list[str]) -> dict[str, Any]:
+    """Internal helper for empty summary."""
     return {
         "has_coupling": False,
         "method": GEOLOGY_METHOD_VERSION,
@@ -1025,6 +1047,7 @@ def _empty_summary(reason: str, warnings: list[str]) -> dict[str, Any]:
 
 
 def _empty_validation() -> dict[str, Any]:
+    """Internal helper for empty validation."""
     return {
         "has_validation": False,
         "weak_label_count": 0,
@@ -1042,6 +1065,7 @@ def _empty_validation() -> dict[str, Any]:
 
 
 def _build_interpretation(row: pd.Series) -> str:
+    """Build interpretation."""
     segment = row.get("segment", "--")
     cls = row.get("grci_class_label", "--")
     grs = float(row.get("GRS", 0) or 0)
@@ -1051,6 +1075,7 @@ def _build_interpretation(row: pd.Series) -> str:
 
 
 def _classify_segment(risk: float, response: float, risk_threshold: float, response_threshold: float) -> str:
+    """Classify segment."""
     high_risk = risk >= risk_threshold
     high_response = response >= response_threshold
     if high_risk and high_response:
@@ -1063,6 +1088,7 @@ def _classify_segment(risk: float, response: float, risk_threshold: float, respo
 
 
 def _coupling_level(value: float) -> str:
+    """Internal helper for coupling level."""
     if value is None or pd.isna(value):
         return "unknown"
     if value >= 0.75:
@@ -1075,6 +1101,7 @@ def _coupling_level(value: float) -> str:
 
 
 def _grade_score(value: Any) -> float:
+    """Internal helper for grade score."""
     text = str(value).strip().upper()
     if not text or text == "NAN":
         return 0.0
@@ -1088,6 +1115,7 @@ def _grade_score(value: Any) -> float:
 
 
 def _hazard_score(text: Any) -> float:
+    """Internal helper for hazard score."""
     haystack = str(text).lower()
     if not haystack or haystack == "nan":
         return 0.0
@@ -1099,6 +1127,7 @@ def _hazard_score(text: Any) -> float:
 
 
 def _combined_text(df: pd.DataFrame, columns: list[str | None]) -> pd.Series:
+    """Internal helper for combined text."""
     existing = [col for col in columns if col and col in df.columns]
     if not existing:
         return pd.Series("", index=df.index)
@@ -1109,6 +1138,7 @@ def _combined_text(df: pd.DataFrame, columns: list[str | None]) -> pd.Series:
 
 
 def _mode_text(series: pd.Series) -> str:
+    """Internal helper for mode text."""
     clean = series.dropna().astype(str)
     clean = clean[clean.str.strip() != ""]
     if clean.empty:
@@ -1118,6 +1148,7 @@ def _mode_text(series: pd.Series) -> str:
 
 
 def _robust_score(series: pd.Series, side: str = "high") -> pd.Series:
+    """Internal helper for robust score."""
     values = pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan)
     if values.notna().sum() < 3:
         return _zero_series(series.index)
@@ -1146,12 +1177,14 @@ def _robust_score(series: pd.Series, side: str = "high") -> pd.Series:
 
 
 def _combine_scores(scores: list[pd.Series], index: pd.Index) -> pd.Series:
+    """Internal helper for combine scores."""
     if not scores:
         return _zero_series(index)
     return pd.concat(scores, axis=1).max(axis=1).fillna(0).clip(0, 1)
 
 
 def _safe_positive_median(series: pd.Series) -> float:
+    """Internal helper for safe positive median."""
     values = pd.to_numeric(series, errors="coerce")
     values = values[values > 0]
     if values.empty:
@@ -1160,16 +1193,19 @@ def _safe_positive_median(series: pd.Series) -> float:
 
 
 def _zero_series(index: pd.Index) -> pd.Series:
+    """Build a zero-filled series for the target index."""
     return pd.Series(0.0, index=index)
 
 
 def _safe_div(num: int | float, den: int | float) -> float:
+    """Internal helper for safe div."""
     if not den:
         return 0.0
     return float(num) / float(den)
 
 
 def _number_key(value: Any) -> str:
+    """Internal helper for number key."""
     try:
         x = float(value)
         if math.isfinite(x) and x.is_integer():
@@ -1180,6 +1216,7 @@ def _number_key(value: Any) -> str:
 
 
 def _infer_output_prefix(df: pd.DataFrame, colmap: dict[str, str | None]) -> str:
+    """Infer output prefix."""
     time_col = colmap.get("time")
     if time_col and time_col in df.columns:
         times = pd.to_datetime(df[time_col], errors="coerce").dropna()

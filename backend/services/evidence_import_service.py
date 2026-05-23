@@ -52,6 +52,7 @@ def canonical_source_type(source_type: str | None) -> str | None:
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
+    """Internal helper for is relative to."""
     try:
         path.resolve().relative_to(parent.resolve())
         return True

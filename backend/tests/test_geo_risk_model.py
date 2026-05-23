@@ -4,6 +4,7 @@ from analysis.geo_risk_model import apply_dynamic_grs_correction, compute_row_gr
 
 
 def test_compute_row_grs_base_combines_grade_hazard_and_source_confidence():
+    """Test compute row grs base combines grade hazard and source confidence."""
     df = pd.DataFrame(
         [
             {
@@ -51,6 +52,7 @@ def test_compute_row_grs_base_combines_grade_hazard_and_source_confidence():
 
 
 def test_apply_dynamic_grs_correction_raises_high_response_segments():
+    """Test apply dynamic grs correction raises high response segments."""
     segment_df = pd.DataFrame(
         {
             "GRS_base": [0.60, 0.20],

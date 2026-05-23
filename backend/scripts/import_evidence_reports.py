@@ -9,6 +9,7 @@ from services.evidence_import_service import import_evidence_files
 
 
 def main():
+    """Run the script entry point."""
     parser = argparse.ArgumentParser(
         description="Incrementally import new TSP/HSP/sketch PDFs into evidence_db.csv."
     )

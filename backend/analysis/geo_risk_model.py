@@ -200,6 +200,7 @@ def _grade_score_series(
     colmap: dict[str, str | None],
     warnings: list[str],
 ) -> pd.Series:
+    """Internal helper for grade score series."""
     col = colmap.get("grade")
     if not col or col not in df.columns:
         warnings.append("GRS base missing grade field; grade_score set to 0")
@@ -213,6 +214,7 @@ def _hazard_score_series(
     text: pd.Series,
     warnings: list[str],
 ) -> pd.Series:
+    """Internal helper for hazard score series."""
     scores = text.map(_keyword_score).fillna(0).clip(0, 1)
     if "__deformation_flag" in df.columns:
         deformation = pd.to_numeric(df["__deformation_flag"], errors="coerce").fillna(0).clip(0, 1) * 0.20
@@ -228,6 +230,7 @@ def _water_score_series(
     text: pd.Series,
     warnings: list[str],
 ) -> pd.Series:
+    """Internal helper for water score series."""
     parts = []
     if "__water_flag" in df.columns:
         parts.append(pd.to_numeric(df["__water_flag"], errors="coerce").fillna(0).clip(0, 1))
@@ -246,6 +249,7 @@ def _collapse_score_series(
     text: pd.Series,
     warnings: list[str],
 ) -> pd.Series:
+    """Internal helper for collapse score series."""
     parts = []
     if "__collapse_flag" in df.columns:
         parts.append(pd.to_numeric(df["__collapse_flag"], errors="coerce").fillna(0).clip(0, 1))
@@ -263,6 +267,7 @@ def _source_confidence_series(
     colmap: dict[str, str | None],
     warnings: list[str],
 ) -> pd.Series:
+    """Internal helper for source confidence series."""
     if "__active_source_count" in df.columns:
         return (pd.to_numeric(df["__active_source_count"], errors="coerce").fillna(0) / 4.0).clip(0, 1)
 
@@ -295,6 +300,7 @@ def _spatial_smooth(series: pd.Series) -> pd.Series:
 
 
 def _grade_score(value: Any) -> float:
+    """Internal helper for grade score."""
     text = str(value).strip().upper()
     if not text or text == "NAN":
         return 0.0
@@ -315,6 +321,7 @@ def _grade_score(value: Any) -> float:
 
 
 def _keyword_score(text: Any) -> float:
+    """Internal helper for keyword score."""
     haystack = str(text).lower()
     if not haystack or haystack == "nan":
         return 0.0
@@ -326,6 +333,7 @@ def _keyword_score(text: Any) -> float:
 
 
 def _keyword_presence(text: Any, keywords: list[str]) -> float:
+    """Internal helper for keyword presence."""
     haystack = str(text).lower()
     if not haystack or haystack == "nan":
         return 0.0
@@ -333,6 +341,7 @@ def _keyword_presence(text: Any, keywords: list[str]) -> float:
 
 
 def _coverage_confidence(value: Any) -> float:
+    """Internal helper for coverage confidence."""
     text = str(value).strip().lower()
     if not text or text == "nan":
         return 0.0
@@ -344,6 +353,7 @@ def _coverage_confidence(value: Any) -> float:
 
 
 def _source_text_confidence(value: Any) -> float:
+    """Internal helper for source text confidence."""
     text = str(value).strip()
     if not text or text.lower() == "nan":
         return 0.0
@@ -354,6 +364,7 @@ def _source_text_confidence(value: Any) -> float:
 
 
 def _combined_text(df: pd.DataFrame, columns: list[str | None]) -> pd.Series:
+    """Internal helper for combined text."""
     existing = [col for col in columns if col and col in df.columns]
     if not existing:
         return pd.Series("", index=df.index)
@@ -364,6 +375,7 @@ def _combined_text(df: pd.DataFrame, columns: list[str | None]) -> pd.Series:
 
 
 def _first_existing(df: pd.DataFrame, columns: list[str]) -> str | None:
+    """Internal helper for first existing."""
     for col in columns:
         if col in df.columns:
             return col
@@ -371,4 +383,5 @@ def _first_existing(df: pd.DataFrame, columns: list[str]) -> str | None:
 
 
 def _zero_series(index: pd.Index) -> pd.Series:
+    """Build a zero-filled series for the target index."""
     return pd.Series(0.0, index=index)

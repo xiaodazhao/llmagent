@@ -20,6 +20,7 @@ _LOCK = RLock()
 
 
 def _build_cache_key(namespace: str, source_path: Path) -> tuple[str, str, int, int]:
+    """Build cache key."""
     resolved = source_path.resolve()
     stat = resolved.stat()
     return (
@@ -35,6 +36,7 @@ def get_or_compute_file_cache(
     source_path: Path,
     compute: Callable[[], Any],
 ) -> tuple[Any, bool]:
+    """Get or compute file cache."""
     key = _build_cache_key(namespace, source_path)
     namespace_key, resolved_path, mtime_ns, file_size = key
 
@@ -81,6 +83,7 @@ def get_or_compute_file_cache(
 
 
 def clear_file_cache(namespace: str | None = None) -> None:
+    """Clear file cache."""
     with _LOCK:
         if namespace is None:
             _CACHE.clear()

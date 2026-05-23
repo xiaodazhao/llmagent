@@ -8,6 +8,7 @@ from utils.chainage_utils import format_chainage_dk
 
 
 def _safe_float(value, default=0.0):
+    """Safely convert a value to float."""
     try:
         if value is None:
             return default
@@ -17,10 +18,12 @@ def _safe_float(value, default=0.0):
 
 
 def _safe_round(value, ndigits=3):
+    """Safely round a numeric value."""
     return round(_safe_float(value), ndigits)
 
 
 def _json_safe(value):
+    """Internal helper for json safe."""
     if isinstance(value, dict):
         return {str(k): _json_safe(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -41,6 +44,7 @@ def _json_safe(value):
 
 
 def _gas_exceed_types(gas_stats):
+    """Internal helper for gas exceed types."""
     gas_all = gas_stats.get("all", {}) if isinstance(gas_stats, dict) else {}
     out = []
     for gas, stat in gas_all.items():
@@ -50,6 +54,7 @@ def _gas_exceed_types(gas_stats):
 
 
 def _latest_top_segment(coupling_summary):
+    """Internal helper for latest top segment."""
     top_segments = coupling_summary.get("top_segments", []) if isinstance(coupling_summary, dict) else []
     if not top_segments:
         return {}
@@ -57,6 +62,7 @@ def _latest_top_segment(coupling_summary):
 
 
 def build_history_record(date, analysis_result):
+    """Build history record."""
     stats = analysis_result.get("stats", {})
     state_stats = analysis_result.get("state_stats", {})
     gas_stats = analysis_result.get("gas_stats", {})
@@ -136,14 +142,17 @@ def build_history_record(date, analysis_result):
     })
 
 def save_history_record(record):
+    """Save history record."""
     return save_history_record_to_db(record)
 
 
 def load_history_records(limit=10, before_date=None):
+    """Load history records."""
     return load_history_records_from_db(limit=limit, before_date=before_date)
 
 
 def _delta_text(name, current_value, previous_value, unit="", ndigits=1):
+    """Internal helper for delta text."""
     current = _safe_float(current_value)
     previous = _safe_float(previous_value)
     delta = current - previous
@@ -154,6 +163,7 @@ def _delta_text(name, current_value, previous_value, unit="", ndigits=1):
 
 
 def build_history_comparison(current_record, history_records):
+    """Build history comparison."""
     if not history_records:
         return {
             "has_history": False,

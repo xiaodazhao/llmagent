@@ -24,15 +24,18 @@ class TBMTools:
         build_risk_profile: Callable[[pd.DataFrame], dict[str, Any]],
         build_speed_profile: Callable[[pd.DataFrame], list[dict[str, Any]]],
     ):
+        """Internal helper for init."""
         self.analyze_tbm_data = analyze_tbm_data
         self.build_risk_profile = build_risk_profile
         self.build_speed_profile = build_speed_profile
         self._analysis_cache: dict[str, dict[str, Any]] = {}
 
     def clear_cache(self) -> None:
+        """Clear cache."""
         self._analysis_cache.clear()
 
     def list_dates(self) -> dict[str, Any]:
+        """Handle list dates."""
         dates = []
         for path in get_all_csv_paths():
             try:
@@ -49,6 +52,7 @@ class TBMTools:
         )
 
     def load_day(self, date: Optional[str] = None) -> dict[str, Any]:
+        """Load day."""
         try:
             path, df = load_csv_by_date(date) if date else load_latest_csv()
             loaded_date = date or self._date_from_path(path.name)
@@ -66,6 +70,7 @@ class TBMTools:
             return fail(str(exc), tool="load_day", date=date)
 
     def analyze_day(self, date: Optional[str] = None) -> dict[str, Any]:
+        """Analyze day."""
         try:
             path, df = load_csv_by_date(date) if date else load_latest_csv()
             loaded_date = date or self._date_from_path(path.name)
@@ -80,6 +85,7 @@ class TBMTools:
             return fail(str(exc), tool="analyze_day", date=date)
 
     def analyze_operation(self, date: Optional[str] = None) -> dict[str, Any]:
+        """Analyze operation."""
         analysis = self._analysis_or_error(date, "analyze_operation")
         if not analysis["success"]:
             return analysis
@@ -104,6 +110,7 @@ class TBMTools:
         )
 
     def analyze_gas(self, date: Optional[str] = None) -> dict[str, Any]:
+        """Analyze gas."""
         analysis = self._analysis_or_error(date, "analyze_gas")
         if not analysis["success"]:
             return analysis
@@ -126,6 +133,7 @@ class TBMTools:
         )
 
     def analyze_geology(self, date: Optional[str] = None) -> dict[str, Any]:
+        """Analyze geology."""
         analysis = self._analysis_or_error(date, "analyze_geology")
         if not analysis["success"]:
             return analysis
@@ -156,6 +164,7 @@ class TBMTools:
         )
 
     def analyze_forward_risk(self, date: Optional[str] = None) -> dict[str, Any]:
+        """Analyze forward risk."""
         analysis = self._analysis_or_error(date, "analyze_forward_risk")
         if not analysis["success"]:
             return analysis
@@ -172,6 +181,7 @@ class TBMTools:
         )
 
     def get_digital_twin_state(self, date: Optional[str] = None) -> dict[str, Any]:
+        """Get digital twin state."""
         analysis = self._analysis_or_error(date, "get_digital_twin_state")
         if not analysis["success"]:
             return analysis
@@ -187,6 +197,7 @@ class TBMTools:
         )
 
     def compare_history(self, date: Optional[str] = None, limit: int = 10) -> dict[str, Any]:
+        """Compare history."""
         analysis = self._analysis_or_error(date, "compare_history")
         if not analysis["success"]:
             return analysis
@@ -208,6 +219,7 @@ class TBMTools:
         )
 
     def risk_profile(self, date: Optional[str] = None) -> dict[str, Any]:
+        """Handle risk profile."""
         analysis = self._analysis_or_error(date, "risk_profile")
         if not analysis["success"]:
             return analysis
@@ -225,6 +237,7 @@ class TBMTools:
         )
 
     def _analysis_or_error(self, date: Optional[str], tool_name: str) -> dict[str, Any]:
+        """Internal helper for analysis or error."""
         try:
             path, df = load_csv_by_date(date) if date else load_latest_csv()
             loaded_date = date or self._date_from_path(path.name)
@@ -249,6 +262,7 @@ class TBMTools:
 
     @staticmethod
     def _date_from_path(name: str) -> Optional[str]:
+        """Internal helper for date from path."""
         try:
             raw = name.replace("tbm_data_", "").replace(".csv", "")
             return datetime.strptime(raw, "%Y%m%d").strftime("%Y-%m-%d")
@@ -262,6 +276,7 @@ class TBMTools:
         df: pd.DataFrame,
         result: dict[str, Any],
     ) -> dict[str, Any]:
+        """Summarize analysis."""
         stats = result.get("stats", {})
         twin = result.get("digital_twin_state", {})
         geo = result.get("geo_summary_segment", {})

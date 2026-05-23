@@ -13,10 +13,6 @@ from analysis.forward_risk_advisor import (
     generate_forward_risk_summary,
     forward_risk_to_text,
 )
-from analysis.coupling_analysis import (
-    add_risk_response_coupling,
-    summarize_coupling,
-)
 from analysis.geology_response_coupling import run_coupling_analysis
 from config import EVIDENCE_DB_PATH, RESULT_DIR
 from geology.geology_fusion_backend import attach_geology_labels, load_evidence_db
@@ -74,6 +70,7 @@ def estimate_valid_samples(
     df: pd.DataFrame,
     feature_cols=STATE_FEATURES
 ) -> int:
+    """Estimate valid samples."""
     valid_mask = pd.Series(True, index=df.index)
 
     if "掘进状态" in df.columns:
@@ -94,6 +91,7 @@ def estimate_valid_samples(
 
 
 def choose_state_params(n_valid: int):
+    """Choose state params."""
     if n_valid < 5:
         return {
             "do_cluster": False,
@@ -192,6 +190,7 @@ def risk_probability_to_text(df_geo):
 # 核心分析引擎
 # =========================
 def _run_geology_analysis(df: pd.DataFrame) -> dict:
+    """Run geology analysis."""
     try:
         evidence_df = load_evidence_db(EVIDENCE_DB_PATH)
         df_geo = attach_geology_labels(df, evidence_df)
@@ -205,18 +204,11 @@ def _run_geology_analysis(df: pd.DataFrame) -> dict:
             top_k=10,
         )
 
-        if coupling_analysis_result.get("summary", {}).get("has_coupling"):
-            segment_df = coupling_analysis_result["segment_df"]
-            coupling_summary = coupling_analysis_result["summary"]
-            coupling_validation = coupling_analysis_result.get("validation", {})
-            coupling_output_paths = coupling_analysis_result.get("output_paths", {})
-            high_attention_segments = coupling_analysis_result.get("high_attention_segments", [])
-        else:
-            segment_df = add_risk_response_coupling(segment_df)
-            coupling_summary = summarize_coupling(segment_df)
-            coupling_validation = {}
-            coupling_output_paths = {}
-            high_attention_segments = coupling_summary.get("top_segments", [])
+        segment_df = coupling_analysis_result["segment_df"]
+        coupling_summary = coupling_analysis_result["summary"]
+        coupling_validation = coupling_analysis_result.get("validation", {})
+        coupling_output_paths = coupling_analysis_result.get("output_paths", {})
+        high_attention_segments = coupling_analysis_result.get("high_attention_segments", [])
 
         geo_summary_record = summarize_geology_record_level(df_geo)
         geo_summary_segment = summarize_geology_segment_level(segment_df)
@@ -269,6 +261,7 @@ def _run_geology_analysis(df: pd.DataFrame) -> dict:
 
 
 def _run_operation_analysis(df_geo: pd.DataFrame) -> dict:
+    """Run operation analysis."""
     segments = load_and_process(df_geo)
     stats = compute_stats(segments)
     return {
@@ -280,6 +273,7 @@ def _run_operation_analysis(df_geo: pd.DataFrame) -> dict:
 
 
 def _run_state_analysis(df_geo: pd.DataFrame) -> dict:
+    """Run state analysis."""
     n_valid = estimate_valid_samples(df_geo, STATE_FEATURES)
     state_cfg = choose_state_params(n_valid)
 
@@ -356,6 +350,7 @@ def _run_state_analysis(df_geo: pd.DataFrame) -> dict:
 
 
 def _run_gas_analysis(df_geo: pd.DataFrame, df_state: pd.DataFrame) -> dict:
+    """Run gas analysis."""
     try:
         gas_stats = compute_gas_stats(df_geo, df_state=df_state)
         return {
@@ -391,6 +386,7 @@ def _build_llm_summary(
     high_attention_segments: list,
     digital_twin_state: dict,
 ) -> dict:
+    """Build llm summary."""
     return {
         "基础工况统计": stats,
         "施工状态标签": state_labels,
@@ -412,6 +408,7 @@ def _build_llm_summary(
 
 
 def analyze_tbm_data(df: pd.DataFrame):
+    """Analyze tbm data."""
     geology_result = _run_geology_analysis(df)
     operation_result = _run_operation_analysis(geology_result["df_geo"])
     state_result = _run_state_analysis(geology_result["df_geo"])
@@ -492,6 +489,7 @@ def analyze_tbm_data(df: pd.DataFrame):
 # 空间风险剖面
 # =========================
 def build_risk_profile(df_geo: pd.DataFrame):
+    """Build risk profile."""
     if "chainage" not in df_geo.columns:
         return {
             "profile": [],
@@ -627,6 +625,7 @@ def build_risk_profile(df_geo: pd.DataFrame):
 
 
 def build_speed_profile(df_geo: pd.DataFrame):
+    """Build speed profile."""
     if "chainage" not in df_geo.columns or "推进速度" not in df_geo.columns:
         return []
 

@@ -10,6 +10,7 @@ DEFAULT_EVIDENCE_DB_PATH = EVIDENCE_DB_PATH
 
 
 def _safe_load_attrs(x):
+    """Safely load serialized evidence attributes."""
     try:
         obj = json.loads(x)
         return obj if isinstance(obj, dict) else {}
@@ -18,6 +19,7 @@ def _safe_load_attrs(x):
 
 
 def _expand_evidence_attrs(df: pd.DataFrame) -> pd.DataFrame:
+    """Internal helper for expand evidence attrs."""
     if "attrs_json" in df.columns:
         df["attrs_obj"] = df["attrs_json"].apply(_safe_load_attrs)
 

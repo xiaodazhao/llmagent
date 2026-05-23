@@ -27,6 +27,7 @@ def build_segments(df: pd.DataFrame, segment_length=10):
 
 
 def _pick_existing_columns(df: pd.DataFrame, candidate_cols):
+    """Internal helper for pick existing columns."""
     return [c for c in candidate_cols if c in df.columns]
 
 

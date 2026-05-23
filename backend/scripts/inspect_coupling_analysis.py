@@ -69,6 +69,7 @@ DISPLAY_COLUMNS = [
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description="Print TBM geology-response coupling analysis details."
     )
@@ -91,6 +92,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Run the script entry point."""
     args = parse_args()
     path, df = load_csv_by_date(args.date) if args.date else load_latest_csv()
     loaded_date = args.date or _date_from_path(path)
@@ -192,6 +194,7 @@ def main() -> int:
 
 
 def print_header(title: str) -> None:
+    """Print header."""
     print()
     print("=" * 80)
     print(title)
@@ -199,6 +202,7 @@ def print_header(title: str) -> None:
 
 
 def print_mapping(title: str, mapping: Any) -> None:
+    """Print mapping."""
     print(f"{title}:")
     if not mapping:
         print("  -")
@@ -211,12 +215,14 @@ def print_mapping(title: str, mapping: Any) -> None:
 
 
 def format_value(value: Any) -> str:
+    """Format value."""
     if isinstance(value, float):
         return f"{value:.4f}"
     return str(value)
 
 
 def _date_from_path(path: Path) -> str | None:
+    """Internal helper for date from path."""
     try:
         raw = path.name.replace("tbm_data_", "").replace(".csv", "")
         if len(raw) == 8:

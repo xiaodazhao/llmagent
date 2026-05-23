@@ -11,11 +11,11 @@ from typing import Dict, List
 import pandas as pd
 
 from config import TSP_DIR, HSP_DIR, SKETCH_DIR, DB_DIR, LOG_DIR
-from scripts.db import records_to_dataframe
 from schemas.schemas import EvidenceRecord
 from parsers.tsp_parser import parse_tsp_pdf
 from parsers.hsp_parser import parse_hsp_pdf
 from parsers.sketch_parser import parse_sketch_pdf
+from services.evidence_import_service import clean_evidence_dataframe, records_to_dataframe
 from services.sqlite_storage_service import sync_evidence_dataframe_to_db
 
 
@@ -69,6 +69,7 @@ def is_valid_pdf(pdf_path: Path) -> bool:
 # 3️⃣ 收集并去重 PDF
 # ==============================
 def collect_unique_pdfs(folder: Path) -> List[Path]:
+    """Collect unique pdfs."""
     seen: Dict[str, Path] = {}
     duplicates = []
 
@@ -96,6 +97,7 @@ def collect_unique_pdfs(folder: Path) -> List[Path]:
 # 4️⃣ 解析一个文件夹
 # ==============================
 def parse_folder(folder: Path, parser_func, source_name: str) -> List[EvidenceRecord]:
+    """Parse folder."""
     records: List[EvidenceRecord] = []
     files = collect_unique_pdfs(folder)
 
@@ -125,76 +127,10 @@ def parse_folder(folder: Path, parser_func, source_name: str) -> List[EvidenceRe
 
 
 # ==============================
-# 5️⃣ 数据清洗
-# ==============================
-def clean_evidence_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    对证据库做基本清洗：
-    - 去掉关键字段缺失
-    - 去掉非法区间
-    - 对 segment 做长度约束
-    - 保留 report_conclusion 等其他层级
-    """
-    if df.empty:
-        return df
-
-    # 关键字段检查
-    required_cols = ["evidence_id", "start_num", "end_num"]
-    missing_cols = [c for c in required_cols if c not in df.columns]
-    if missing_cols:
-        raise ValueError(f"证据库缺少必要字段: {missing_cols}")
-
-    # 记录级去重
-    df = df.drop_duplicates(subset=["evidence_id"]).copy()
-
-    # 去掉区间为空
-    df = df.dropna(subset=["start_num", "end_num"]).copy()
-
-    # 数值化，防御性处理
-    df["start_num"] = pd.to_numeric(df["start_num"], errors="coerce")
-    df["end_num"] = pd.to_numeric(df["end_num"], errors="coerce")
-    df = df.dropna(subset=["start_num", "end_num"]).copy()
-
-    # start <= end
-    df = df[df["start_num"] <= df["end_num"]].copy()
-
-    # 分层清洗
-    if "source_level" in df.columns:
-        seg_mask = df["source_level"] == "segment"
-        df_seg = df[seg_mask].copy()
-        df_other = df[~seg_mask].copy()
-
-        # 只对 segment 做长度约束
-        if not df_seg.empty:
-            df_seg["seg_len"] = df_seg["end_num"] - df_seg["start_num"]
-            df_seg = df_seg[
-                (df_seg["seg_len"] >= 0) &
-                (df_seg["seg_len"] <= 300)
-            ].copy()
-            df_seg.drop(columns=["seg_len"], inplace=True, errors="ignore")
-
-        df = pd.concat([df_seg, df_other], ignore_index=True)
-    else:
-        # 如果没有 source_level，就统一做长度清洗
-        df["seg_len"] = df["end_num"] - df["start_num"]
-        df = df[
-            (df["seg_len"] >= 0) &
-            (df["seg_len"] <= 300)
-        ].copy()
-        df.drop(columns=["seg_len"], inplace=True, errors="ignore")
-
-    # 排序，方便后续查看
-    sort_cols = [c for c in ["source_type", "report_id", "start_num", "end_num"] if c in df.columns]
-    if sort_cols:
-        df = df.sort_values(sort_cols).reset_index(drop=True)
-
-    return df
-
-
-# ==============================
-# 6️⃣ 主流程
+# 5️⃣ 主流程
 # ==============================
 def main():
+    """Run the script entry point."""
     all_records: List[EvidenceRecord] = []
 
     # 三类证据

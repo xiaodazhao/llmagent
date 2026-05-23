@@ -3,6 +3,7 @@ from utils.chainage_utils import format_chainage_dk
 
 
 def test_build_history_record_extracts_core_fields():
+    """Test build history record extracts core fields."""
     analysis_result = {
         "stats": {
             "stop_total_min": 30,
@@ -60,6 +61,7 @@ def test_build_history_record_extracts_core_fields():
 
 
 def test_build_history_comparison_describes_deltas_and_new_hazards():
+    """Test build history comparison describes deltas and new hazards."""
     current_record = {
         "operation": {
             "work_ratio": 0.60,

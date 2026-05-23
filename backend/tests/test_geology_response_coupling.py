@@ -4,6 +4,7 @@ from analysis.geology_response_coupling import run_coupling_analysis
 
 
 def _sample_coupling_df():
+    """Internal helper for sample coupling df."""
     return pd.DataFrame(
         [
             {
@@ -59,6 +60,7 @@ def _sample_coupling_df():
 
 
 def test_run_coupling_analysis_returns_segment_metrics_and_summary():
+    """Test run coupling analysis returns segment metrics and summary."""
     result = run_coupling_analysis(_sample_coupling_df(), segment_length=10, output_dir=None, top_k=5)
 
     assert any("stop_anomaly uses" in warning for warning in result["warnings"])
@@ -73,6 +75,7 @@ def test_run_coupling_analysis_returns_segment_metrics_and_summary():
 
 
 def test_run_coupling_analysis_warns_when_chainage_missing():
+    """Test run coupling analysis warns when chainage missing."""
     df = pd.DataFrame([{"推进速度": 1.0, "推力": 10, "刀盘扭矩": 10}])
 
     result = run_coupling_analysis(df, output_dir=None)

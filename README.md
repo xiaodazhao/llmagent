@@ -5,6 +5,7 @@
 ## 文档导航
 
 - [项目正式说明文档](docs/research_overview.md)
+- [后端脚本清单](docs/backend_inventory.md)
 - [证据导入说明](docs/evidence_import.md)
 - [Agent 设计说明](docs/agent_v2.md)
 

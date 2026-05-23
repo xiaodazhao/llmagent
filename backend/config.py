@@ -12,6 +12,7 @@ PROJECT_ROOT = BACKEND_DIR.parent
 
 
 def _load_env_files() -> None:
+    """Load env files."""
     if load_dotenv is None:
         return
     load_dotenv(PROJECT_ROOT / ".env")
@@ -47,6 +48,7 @@ def _legacy_data_root() -> Path:
 
 
 def _resolve_path_env(name: str, default: Path) -> Path:
+    """Resolve path env."""
     raw = os.getenv(name, "").strip()
     if not raw:
         return default
@@ -57,6 +59,7 @@ def _resolve_path_env(name: str, default: Path) -> Path:
 
 
 def _resolve_float_env(name: str, default: float) -> float:
+    """Resolve float env."""
     raw = os.getenv(name, "").strip()
     if not raw:
         return default

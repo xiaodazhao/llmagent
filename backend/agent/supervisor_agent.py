@@ -59,6 +59,7 @@ class ConversationContext:
 
 
 def _agent_log(event: str, **fields: Any) -> None:
+    """Internal helper for agent log."""
     ordered = []
     for key, value in fields.items():
         if value is None:
@@ -72,11 +73,13 @@ class DomainAgent:
     """Small specialist wrapper around the shared TBM tool layer."""
 
     def __init__(self, name: str, description: str, tools: TBMTools):
+        """Internal helper for init."""
         self.name = name
         self.description = description
         self.tools = tools
 
     def run(self, tool_names: list[str], date: Optional[str]) -> dict[str, Any]:
+        """Run the requested data."""
         trace = []
         for tool_name in tool_names:
             result = self._call_tool(tool_name, date)
@@ -104,6 +107,7 @@ class DomainAgent:
         )
 
     def _call_tool(self, tool_name: str, date: Optional[str]) -> dict[str, Any]:
+        """Call tool."""
         tool_fn = getattr(self.tools, tool_name, None)
         if tool_fn is None:
             return fail(f"unknown tool: {tool_name}", agent=self.name, tool=tool_name)
@@ -127,6 +131,7 @@ class TBMSupervisorAgent:
         build_risk_profile: Callable,
         build_speed_profile: Callable,
     ):
+        """Internal helper for init."""
         self.tools = TBMTools(
             analyze_tbm_data=analyze_tbm_data,
             build_risk_profile=build_risk_profile,
@@ -166,6 +171,7 @@ class TBMSupervisorAgent:
         }
 
     def capabilities(self) -> dict[str, Any]:
+        """Handle capabilities."""
         capabilities = describe_capabilities()
         capabilities["supervisor"] = {
             "name": "TBMSupervisorAgent",
@@ -186,6 +192,7 @@ class TBMSupervisorAgent:
         use_llm: bool = False,
         verbose: bool = False,
     ) -> dict[str, Any]:
+        """Run the requested data."""
         query = (query or "").strip()
         if not query:
             return fail("query is required", tool="tbm_supervisor_agent")
@@ -307,6 +314,7 @@ class TBMSupervisorAgent:
         )
 
     def _plan(self, query: str, context: ConversationContext) -> list[SupervisorStep]:
+        """Internal helper for plan."""
         q = query.lower()
         steps: list[SupervisorStep] = []
         inherited_agents = self._inherit_agents_from_context(q, context)
@@ -433,6 +441,7 @@ class TBMSupervisorAgent:
         tool_results: list[dict[str, Any]],
         context: ConversationContext,
     ) -> str:
+        """Build answer."""
         target = date or "最新可用日期"
         lines = [
             f"Supervisor 调度计划（{target}）："
@@ -476,6 +485,7 @@ class TBMSupervisorAgent:
 
     @staticmethod
     def _answer_day(agent: str, data: dict[str, Any]) -> list[str]:
+        """Internal helper for answer day."""
         op = data.get("operation", {})
         geo = data.get("geology", {})
         fwd = data.get("forward_risk", {})
@@ -487,6 +497,7 @@ class TBMSupervisorAgent:
 
     @staticmethod
     def _answer_operation(agent: str, data: dict[str, Any]) -> list[str]:
+        """Internal helper for answer operation."""
         stats = data.get("stats", {})
         return [
             f"{agent}: 工作次数={stats.get('work_count', 0)}，停机次数={stats.get('stop_count', 0)}，异常次数={stats.get('abnormal_count', 0)}。",
@@ -495,6 +506,7 @@ class TBMSupervisorAgent:
 
     @staticmethod
     def _answer_gas(agent: str, data: dict[str, Any]) -> list[str]:
+        """Internal helper for answer gas."""
         exceed_types = data.get("exceed_types", [])
         if exceed_types:
             return [f"{agent}: 检测到气体超限类型：{', '.join(map(str, exceed_types))}。"]
@@ -502,6 +514,7 @@ class TBMSupervisorAgent:
 
     @staticmethod
     def _answer_geology(agent: str, data: dict[str, Any]) -> list[str]:
+        """Internal helper for answer geology."""
         summary = data.get("segment_summary", {})
         coupling = data.get("coupling_summary", {})
         return [
@@ -511,6 +524,7 @@ class TBMSupervisorAgent:
 
     @staticmethod
     def _answer_forward(agent: str, data: dict[str, Any]) -> list[str]:
+        """Internal helper for answer forward."""
         fwd = data.get("forward_risk", {})
         return [
             f"{agent}: 前方风险等级={fwd.get('advice_level')}，前探距离={fwd.get('lookahead_m')} m，高风险数量={fwd.get('high_risk_count', 0)}。",
@@ -519,6 +533,7 @@ class TBMSupervisorAgent:
 
     @staticmethod
     def _answer_profile(agent: str, data: dict[str, Any]) -> list[str]:
+        """Internal helper for answer profile."""
         profile = data.get("risk_profile", {})
         high_segments = profile.get("high_segments", []) if isinstance(profile, dict) else []
         speed_profile = data.get("speed_profile", [])
@@ -528,6 +543,7 @@ class TBMSupervisorAgent:
 
     @staticmethod
     def _answer_twin(agent: str, data: dict[str, Any]) -> list[str]:
+        """Internal helper for answer twin."""
         twin = data.get("digital_twin_state", {})
         pos = twin.get("position_state", {})
         op = twin.get("operation_state", {})
@@ -538,6 +554,7 @@ class TBMSupervisorAgent:
 
     @staticmethod
     def _answer_history(agent: str, data: dict[str, Any]) -> list[str]:
+        """Internal helper for answer history."""
         comparison = data.get("history_comparison", {})
         return [
             f"{agent}: 有历史记录={comparison.get('has_history', False)}，对比记录数={comparison.get('history_count', 0)}。",
@@ -546,6 +563,7 @@ class TBMSupervisorAgent:
 
     @classmethod
     def _load_context(cls, session_id: str, history_limit: int) -> ConversationContext:
+        """Load context."""
         messages = load_agent_messages(session_id, limit=max(2, history_limit * 2))
         last_user_query = None
         last_answer = None
@@ -592,6 +610,7 @@ class TBMSupervisorAgent:
         context: ConversationContext,
         selected_date: Optional[str],
     ) -> str:
+        """Normalize query."""
         normalized = query.strip()
         lower_query = normalized.lower()
         follow_up = bool(context.last_user_query and cls._is_follow_up(lower_query))
@@ -613,6 +632,7 @@ class TBMSupervisorAgent:
 
     @classmethod
     def _context_summary(cls, context: ConversationContext, selected_date: Optional[str]) -> dict[str, Any]:
+        """Internal helper for context summary."""
         return {
             "session_id": context.session_id,
             "message_count": len(context.messages),
@@ -633,6 +653,7 @@ class TBMSupervisorAgent:
         selected_date: Optional[str],
         payload: dict[str, Any],
     ) -> None:
+        """Internal helper for persist turn."""
         title = query[:40]
         session_payload = {
             "last_date": selected_date,
@@ -660,6 +681,7 @@ class TBMSupervisorAgent:
 
     @classmethod
     def _is_follow_up(cls, lower_query: str) -> bool:
+        """Internal helper for is follow up."""
         return cls._has_any(lower_query, list(FOLLOW_UP_MARKERS))
 
     @classmethod
@@ -668,12 +690,14 @@ class TBMSupervisorAgent:
         lower_query: str,
         context: ConversationContext,
     ) -> list[str]:
+        """Internal helper for inherit agents from context."""
         if not context.last_routed_agents or not cls._is_follow_up(lower_query):
             return []
         return list(context.last_routed_agents)
 
     @classmethod
     def _compact_agent_results(cls, agent_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Compact agent results."""
         compact = []
         for item in agent_results:
             result = item.get("result", {})
@@ -690,6 +714,7 @@ class TBMSupervisorAgent:
 
     @classmethod
     def _compact_tool_results(cls, tool_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Compact tool results."""
         compact = []
         for item in tool_results:
             result = item.get("result", {})
@@ -704,6 +729,7 @@ class TBMSupervisorAgent:
 
     @classmethod
     def _tool_summary(cls, tool: str, data: dict[str, Any]) -> dict[str, Any]:
+        """Internal helper for tool summary."""
         if tool == "list_dates":
             dates = data.get("dates", [])
             return {
@@ -800,6 +826,7 @@ class TBMSupervisorAgent:
 
     @classmethod
     def _build_highlights(cls, tool_results: list[dict[str, Any]]) -> dict[str, Any]:
+        """Build highlights."""
         highlights: dict[str, Any] = {
             "warnings": [],
         }
@@ -882,6 +909,7 @@ class TBMSupervisorAgent:
         draft_answer: str,
         context: ConversationContext,
     ) -> str:
+        """Internal helper for polish with llm."""
         memory_hint = ""
         if context.last_user_query:
             memory_hint = (
@@ -899,15 +927,18 @@ class TBMSupervisorAgent:
 
     @staticmethod
     def _extract_date(query: str) -> Optional[str]:
+        """Extract date."""
         match = DATE_RE.search(query or "")
         return match.group(1) if match else None
 
     @staticmethod
     def _has_any(text: str, keywords: list[str]) -> bool:
+        """Internal helper for has any."""
         return any(k.lower() in text for k in keywords)
 
     @staticmethod
     def _dedupe(items: list[str]) -> list[str]:
+        """Internal helper for dedupe."""
         seen = set()
         out = []
         for item in items:
@@ -918,6 +949,7 @@ class TBMSupervisorAgent:
 
     @staticmethod
     def _merge_agent_steps(steps: list[SupervisorStep]) -> list[SupervisorStep]:
+        """Internal helper for merge agent steps."""
         merged: dict[str, list[str]] = {}
         reasons: dict[str, list[str]] = {}
         order: list[str] = []

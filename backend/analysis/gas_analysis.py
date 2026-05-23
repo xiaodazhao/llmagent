@@ -159,6 +159,7 @@ def gas_stats_to_text(stats: dict):
     lines = []
 
     def render(title, s):
+        """Handle render."""
         if not s:
             return
 

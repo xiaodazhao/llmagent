@@ -120,6 +120,7 @@ TOOL_SPECS: dict[str, ToolSpec] = {
 
 
 def describe_capabilities() -> dict:
+    """Describe capabilities."""
     return {
         "agents": [
             {
@@ -142,11 +143,13 @@ def describe_capabilities() -> dict:
 
 
 def tool_agent_name(tool_name: str) -> Optional[str]:
+    """Handle tool agent name."""
     spec = TOOL_SPECS.get(tool_name)
     return spec.agent if spec else None
 
 
 def resolve_tool(tools_obj: object, tool_name: str) -> Optional[Callable]:
+    """Resolve tool."""
     spec = TOOL_SPECS.get(tool_name)
     if spec is None:
         return None

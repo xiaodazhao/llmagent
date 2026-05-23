@@ -1,4 +1,37 @@
 import math
+import re
+from typing import Any, Optional
+
+
+def mileage_to_num(mileage: str) -> Optional[float]:
+    """Convert mileage text like DyK1014+616 to numeric chainage."""
+    if mileage is None:
+        return None
+    text = str(mileage).strip().replace(" ", "")
+    match = re.search(r"DyK(\d+)\+(\d+(?:\.\d+)?)", text)
+    if not match:
+        return None
+    return float(match.group(1)) * 1000 + float(match.group(2))
+
+
+def num_to_mileage(num: float) -> str:
+    """Convert numeric chainage back into DyK mileage text."""
+    km = int(num // 1000)
+    meter = num - km * 1000
+    return f"DyK{km}+{meter:.1f}"
+
+
+def safe_float(value: Any):
+    """Safely cast a value to float or return None."""
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def compact_text(text: str) -> str:
+    """Remove whitespace from text for compact matching."""
+    return re.sub(r"\s+", "", text or "")
 
 
 def format_chainage_dk(value, unknown="未知里程"):
@@ -33,4 +66,5 @@ def format_chainage_dk(value, unknown="未知里程"):
 
 
 def format_chainage_range_dk(start, end, separator="~"):
+    """Format chainage range dk."""
     return f"{format_chainage_dk(start)}{separator}{format_chainage_dk(end)}"

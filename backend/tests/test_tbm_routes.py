@@ -9,6 +9,7 @@ import routes.tbm as tbm_routes
 
 
 def _build_client(monkeypatch, result: dict, *, cache_hit: bool = False) -> TestClient:
+    """Internal helper for build client."""
     app = FastAPI()
     tbm_routes.register_tbm_routes(
         app,
@@ -32,6 +33,7 @@ def _build_client(monkeypatch, result: dict, *, cache_hit: bool = False) -> Test
 
 
 def test_state_route_returns_defaults_when_summary_fields_missing(monkeypatch):
+    """Test state route returns defaults when summary fields missing."""
     result = {
         "state_segments": {
             "0": [(pd.Timestamp("2023-12-30 08:00:00"), pd.Timestamp("2023-12-30 08:03:00"))]
@@ -57,6 +59,7 @@ def test_state_route_returns_defaults_when_summary_fields_missing(monkeypatch):
 
 
 def test_state_route_returns_efficiency_and_summary_meta(monkeypatch):
+    """Test state route returns efficiency and summary meta."""
     result = {
         "state_segments": {
             1: [(pd.Timestamp("2023-12-30 09:10:00"), pd.Timestamp("2023-12-30 09:16:30"))]
@@ -94,6 +97,7 @@ def test_state_route_returns_efficiency_and_summary_meta(monkeypatch):
 
 
 def test_agent_v2_reuses_session_context_for_follow_up(monkeypatch, isolated_sqlite_env):
+    """Test agent v2 reuses session context for follow up."""
     result = {
         "stats": {
             "work_total_min": 120.0,

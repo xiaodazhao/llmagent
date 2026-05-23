@@ -3,6 +3,7 @@ import pandas as pd
 
 
 def _judge_condition(row):
+    """Internal helper for judge condition."""
     if "掘进状态" in row.index and pd.notna(row["掘进状态"]):
         status = row["掘进状态"]
         if status == 0:
@@ -46,6 +47,7 @@ def _judge_condition(row):
 
 
 def _condition_code_to_state(code):
+    """Internal helper for condition code to state."""
     mapping = {
         0: "stop",
         1: "transition",
@@ -56,6 +58,7 @@ def _condition_code_to_state(code):
 
 
 def _condition_code_to_cn(code):
+    """Internal helper for condition code to cn."""
     mapping = {
         0: "停机",
         1: "启动/过渡",
@@ -106,6 +109,7 @@ def load_and_process(source):
 
 
 def segments_to_text(segments):
+    """Handle segments to text."""
     if not segments:
         return "未识别到有效工况段。"
 
@@ -124,15 +128,18 @@ def segments_to_text(segments):
 
 
 def compute_stats(segments):
+    """Compute stats."""
     stop = [x for x in segments if x["state"] == "stop"]
     transition = [x for x in segments if x["state"] == "transition"]
     work = [x for x in segments if x["state"] == "work"]
     abnormal = [x for x in segments if x["state"] == "abnormal"]
 
     def total(xs):
+        """Handle total."""
         return sum(x["duration_sec"] for x in xs)
 
     def longest(xs):
+        """Handle longest."""
         return max(xs, key=lambda x: x["duration_sec"]) if xs else None
 
     return {
@@ -156,7 +163,9 @@ def compute_stats(segments):
 
 
 def stats_to_text(stats):
+    """Handle stats to text."""
     def fmt_seg(s):
+        """Handle fmt seg."""
         if not s:
             return "无"
         start = s["start"].strftime("%H:%M:%S")

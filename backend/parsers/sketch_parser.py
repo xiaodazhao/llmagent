@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import List, Optional
 
 from schemas.schemas import EvidenceRecord
-from utils.utils import mileage_to_num
+from utils.chainage_utils import mileage_to_num
 
 
 def _norm_text(text: str) -> str:
+    """Internal helper for norm text."""
     if not text:
         return ""
     text = text.replace("\u3000", " ")
@@ -19,6 +20,7 @@ def _norm_text(text: str) -> str:
 
 
 def _flat_text(text: str) -> str:
+    """Internal helper for flat text."""
     text = _norm_text(text)
     text = text.replace("\n", "")
     text = re.sub(r"\s+", "", text)
@@ -26,6 +28,7 @@ def _flat_text(text: str) -> str:
 
 
 def _safe_mileage(x: Optional[str]) -> Optional[float]:
+    """Safely convert mileage text into a numeric chainage."""
     if not x:
         return None
     try:
@@ -35,11 +38,13 @@ def _safe_mileage(x: Optional[str]) -> Optional[float]:
 
 
 def _safe_search(pattern: str, text: str, flags=re.S) -> Optional[str]:
+    """Safely search text with a regex pattern."""
     m = re.search(pattern, text, flags)
     return m.group(1).strip() if m else None
 
 
 def _extract_grade(flat: str) -> Optional[str]:
+    """Extract grade."""
     m = re.search(r"建议围岩级别([ⅠⅡⅢⅣⅤIVX]+)", flat)
     if m:
         return m.group(1)
@@ -57,6 +62,7 @@ def _extract_grade(flat: str) -> Optional[str]:
 
 def _extract_weathering(flat: str) -> Optional[str]:
     # 优先识别带 √ 的
+    """Extract weathering."""
     for x in ["未风化", "微风化", "弱风化", "强风化", "全风化"]:
         if f"{x}√" in flat:
             return x
@@ -69,6 +75,7 @@ def _extract_weathering(flat: str) -> Optional[str]:
 
 
 def _extract_joint_degree(flat: str) -> Optional[str]:
+    """Extract joint degree."""
     if "裂隙发育密集" in flat or "相对密集" in flat:
         return "发育密集"
     if "裂隙较发育" in flat:
@@ -88,6 +95,7 @@ def _extract_joint_degree(flat: str) -> Optional[str]:
 
 
 def _extract_rock_mass_state(flat: str) -> Optional[str]:
+    """Extract rock mass state."""
     if "破碎-极破碎" in flat or "破碎极破碎" in flat:
         return "破碎-极破碎"
     if "岩体极破碎" in flat:
@@ -101,12 +109,14 @@ def _extract_rock_mass_state(flat: str) -> Optional[str]:
 
 
 def _extract_rock_uniformity(flat: str) -> Optional[str]:
+    """Extract rock uniformity."""
     if "软硬不均" in flat:
         return "软硬不均"
     return None
 
 
 def _extract_stability(flat: str) -> Optional[str]:
+    """Extract stability."""
     if "不能自稳" in flat or "自稳困难" in flat or "自稳性较差" in flat:
         return "较差"
     if "稳定" in flat or "自稳" in flat:
@@ -115,6 +125,7 @@ def _extract_stability(flat: str) -> Optional[str]:
 
 
 def _extract_water_info(flat: str):
+    """Extract water info."""
     water_flag = 0
     water_type = None
 
@@ -173,6 +184,7 @@ def _extract_collapse_flag(flat: str) -> int:
 
 
 def _extract_lithology(flat: str) -> Optional[str]:
+    """Extract lithology."""
     if "板岩夹变质砂岩" in flat:
         return "板岩夹变质砂岩"
     return None
@@ -188,6 +200,7 @@ def _build_risk_tags(
     mud_filling_flag: int,
     support_grade: Optional[str],
 ):
+    """Build risk tags."""
     tags = []
 
     if water_flag:
@@ -236,6 +249,7 @@ def _infer_risk_level(
     stability: Optional[str],
     mud_filling_flag: int,
 ) -> str:
+    """Infer risk level."""
     if (
         collapse_flag == 1
         or water_type in {"线-股状出水", "涌出或喷出"}
@@ -259,6 +273,7 @@ def _infer_risk_level(
 
 
 def parse_sketch_pdf(pdf_path: Path) -> List[EvidenceRecord]:
+    """Parse sketch pdf."""
     import fitz
 
     doc = fitz.open(pdf_path)

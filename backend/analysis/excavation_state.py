@@ -176,6 +176,7 @@ def explain_excavation_states(df):
 # 4. 施工状态段 → 文本（LLM 语义层）
 # ============================================================
 def excavation_state_to_text(segments, state_labels=None):
+    """Handle excavation state to text."""
     lines = []
 
     for state, segs in segments.items():
@@ -283,6 +284,7 @@ def excavation_state_stats(df, segments):
 # 7. 施工状态效率 → 文本
 # ============================================================
 def efficiency_to_text(eff_df, state_labels=None):
+    """Handle efficiency to text."""
     if eff_df.empty:
         return "数据量不足，无法计算施工状态效率统计。"
 
@@ -307,6 +309,7 @@ def efficiency_to_text(eff_df, state_labels=None):
 # 8. 施工状态总体统计 → 文本
 # ============================================================
 def excavation_state_stats_to_text(stats, state_labels=None):
+    """Handle excavation state stats to text."""
     if not stats:
         return "无施工状态统计结果。"
 

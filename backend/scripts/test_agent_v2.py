@@ -27,6 +27,7 @@ class CheckFailed(AssertionError):
 
 
 def request_json(method: str, url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Request json."""
     data = None
     headers = {"Accept": "application/json"}
     if payload is not None:
@@ -50,11 +51,13 @@ def request_json(method: str, url: str, payload: dict[str, Any] | None = None) -
 
 
 def require(condition: bool, message: str) -> None:
+    """Handle require."""
     if not condition:
         raise CheckFailed(message)
 
 
 def check_capabilities(base_url: str) -> None:
+    """Check capabilities."""
     response = request_json("GET", f"{base_url}/api/tbm/agent_v2/capabilities")
     supervisor = response.get("supervisor", {})
     agents = supervisor.get("active_agents", [])
@@ -68,6 +71,7 @@ def check_capabilities(base_url: str) -> None:
 
 
 def check_available_dates(base_url: str) -> str:
+    """Check available dates."""
     response = request_json(
         "POST",
         f"{base_url}/api/tbm/agent_v2",
@@ -93,6 +97,7 @@ def check_available_dates(base_url: str) -> str:
 
 
 def check_multi_agent_route(base_url: str, date: str, verbose: bool) -> None:
+    """Check multi agent route."""
     response = request_json(
         "POST",
         f"{base_url}/api/tbm/agent_v2",
@@ -122,6 +127,7 @@ def check_multi_agent_route(base_url: str, date: str, verbose: bool) -> None:
 
 
 def check_invalid_date(base_url: str) -> None:
+    """Check invalid date."""
     response = request_json(
         "POST",
         f"{base_url}/api/tbm/agent_v2",
@@ -138,6 +144,7 @@ def check_invalid_date(base_url: str) -> None:
 
 
 def main() -> int:
+    """Run the script entry point."""
     parser = argparse.ArgumentParser(description="Smoke-test /api/tbm/agent_v2.")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="Backend base URL.")
     parser.add_argument("--date", default=None, help="Date to use for analysis, for example 2023-12-30.")

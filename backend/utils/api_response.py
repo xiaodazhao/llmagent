@@ -10,6 +10,7 @@ def api_success(
     meta: dict | None = None,
     status_code: int = 200,
 ):
+    """Handle api success."""
     body = {
         "ok": True,
         "message": message,
@@ -31,6 +32,7 @@ def api_error(
     meta: dict | None = None,
     error_code: str | None = None,
 ):
+    """Handle api error."""
     body = {
         "ok": False,
         "message": message,

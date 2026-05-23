@@ -8,13 +8,14 @@ import pdfplumber
 import fitz  # PyMuPDF
 
 from schemas.schemas import EvidenceRecord
-from utils.utils import mileage_to_num
+from utils.chainage_utils import mileage_to_num
 
 
 # =========================
 # 1. PDF全文提取
 # =========================
 def extract_pdf_text(pdf_path: Path) -> str:
+    """Extract pdf text."""
     doc = fitz.open(pdf_path)
     try:
         pages = [p.get_text() for p in doc]
@@ -27,6 +28,7 @@ def extract_pdf_text(pdf_path: Path) -> str:
 # 2. 基础工具
 # =========================
 def _norm_text(text: str) -> str:
+    """Internal helper for norm text."""
     if not text:
         return ""
     text = text.replace("\u3000", " ")
@@ -50,6 +52,7 @@ def _flat_text(text: str) -> str:
 
 
 def _safe_search(pattern: str, text: str, flags=re.S) -> Optional[str]:
+    """Safely search text with a regex pattern."""
     if not text:
         return None
     m = re.search(pattern, text, flags)
@@ -57,6 +60,7 @@ def _safe_search(pattern: str, text: str, flags=re.S) -> Optional[str]:
 
 
 def _safe_mileage(x: Optional[str]) -> Optional[float]:
+    """Safely convert mileage text into a numeric chainage."""
     if not x:
         return None
     try:
@@ -66,6 +70,7 @@ def _safe_mileage(x: Optional[str]) -> Optional[float]:
 
 
 def _first_match(candidates: List[str], text: str) -> Optional[str]:
+    """Internal helper for first match."""
     for c in candidates:
         if c in text:
             return c
@@ -101,6 +106,7 @@ def _extract_range_values(label: str, text: str) -> Dict[str, Optional[float]]:
 # 3. 报告级元信息提取
 # =========================
 def extract_meta(text: str, pdf_name: str) -> Dict[str, Any]:
+    """Extract meta."""
     t = _norm_text(text)
 
     report_id = pdf_name.replace(".pdf", "")
@@ -202,6 +208,7 @@ def extract_table2_text_from_section(section_text: str) -> str:
 
 
 def _score_param_cell(text: str) -> int:
+    """Internal helper for score param cell."""
     if not text:
         return 0
     flat = re.sub(r"\s+", "", text)
@@ -210,6 +217,7 @@ def _score_param_cell(text: str) -> int:
 
 
 def _score_conclusion_cell(text: str) -> int:
+    """Internal helper for score conclusion cell."""
     if not text:
         return 0
     flat = re.sub(r"\s+", "", text)
@@ -259,6 +267,7 @@ def _pick_param_and_conclusion_cells(row: List[str]) -> Dict[str, str]:
 # 5. overview 提取
 # =========================
 def _parse_overview_record(text: str, meta: Dict[str, Any]) -> List[EvidenceRecord]:
+    """Parse overview record."""
     t = _norm_text(text)
     m = re.search(
         r"本次预报当前掌子面.*?(?=5\s*现场工作布置及数据采集|5\.1|6\s*资料处理与解释)",
@@ -328,6 +337,7 @@ def _parse_overview_record(text: str, meta: Dict[str, Any]) -> List[EvidenceReco
 # 6. 解析 7结论
 # =========================
 def _parse_grade_records(conclusion_text: str, meta: Dict[str, Any]) -> List[EvidenceRecord]:
+    """Parse grade records."""
     flat = _flat_text(conclusion_text)
 
     matches = re.findall(
@@ -381,6 +391,7 @@ def _parse_grade_records(conclusion_text: str, meta: Dict[str, Any]) -> List[Evi
 
 
 def _parse_collapse_records(conclusion_text: str, meta: Dict[str, Any]) -> List[EvidenceRecord]:
+    """Parse collapse records."""
     flat = _flat_text(conclusion_text)
 
     matches = re.findall(
@@ -466,6 +477,7 @@ def _parse_collapse_records(conclusion_text: str, meta: Dict[str, Any]) -> List[
 
 
 def _parse_water_records(conclusion_text: str, meta: Dict[str, Any]) -> List[EvidenceRecord]:
+    """Parse water records."""
     flat = _flat_text(conclusion_text)
 
     records = []
@@ -534,6 +546,7 @@ def parse_table2_structured_row(
     meta: Dict[str, Any],
     idx: int
 ) -> Optional[EvidenceRecord]:
+    """Parse table2 structured row."""
     mileage_text = row_data.get("mileage", "") or ""
     params_text = row_data.get("params", "") or ""
     conclusion_text = row_data.get("conclusion", "") or ""
@@ -683,6 +696,7 @@ def parse_table2_structured_row(
 
 
 def parse_table2_records_by_pdfplumber(pdf_path: Path, meta: Dict[str, Any]) -> List[EvidenceRecord]:
+    """Parse table2 records by pdfplumber."""
     records: List[EvidenceRecord] = []
     idx = 0
 
@@ -741,6 +755,7 @@ def parse_table2_records_by_pdfplumber(pdf_path: Path, meta: Dict[str, Any]) -> 
 # 8. 冲突标记：结论 vs 表2
 # =========================
 def attach_grade_conflicts(records: List[EvidenceRecord]) -> List[EvidenceRecord]:
+    """Attach grade conflicts."""
     conclusion_map = {}
     segment_map = {}
 
@@ -788,6 +803,7 @@ def attach_grade_conflicts(records: List[EvidenceRecord]) -> List[EvidenceRecord
 # 9. 主入口
 # =========================
 def parse_tsp_pdf(pdf_path: Path) -> List[EvidenceRecord]:
+    """Parse tsp pdf."""
     text = extract_pdf_text(pdf_path)
     meta = extract_meta(text, pdf_path.name)
 

@@ -64,6 +64,7 @@ def normalize_report_id(report_id: str) -> str:
 
 
 def _safe_load_attrs(attrs_json_str):
+    """Safely load serialized evidence attributes."""
     try:
         data = json.loads(attrs_json_str)
         return data if isinstance(data, dict) else {}
@@ -134,6 +135,7 @@ def _record_weight(row, attrs):
 
 
 def _pick_mode(values):
+    """Internal helper for pick mode."""
     values = [v for v in values if v not in [None, "", [], {}]]
     if not values:
         return None
@@ -145,6 +147,7 @@ def _pick_mode(values):
 
 
 def _pick_worst_grade(grades):
+    """Internal helper for pick worst grade."""
     grades = [_normalize_grade(g) for g in grades if g]
     if not grades:
         return ""
@@ -156,6 +159,7 @@ def _pick_worst_grade(grades):
 
 
 def _dedup_preserve_order(items):
+    """Internal helper for dedup preserve order."""
     out = []
     seen = set()
     for x in items:
@@ -168,6 +172,7 @@ def _dedup_preserve_order(items):
 
 
 def _merge_hazard_tags(parsed_rows):
+    """Internal helper for merge hazard tags."""
     hazard_set = []
 
     for row, attrs in parsed_rows:
@@ -194,6 +199,7 @@ def _merge_hazard_tags(parsed_rows):
 
 
 def _merge_water_type(parsed_rows):
+    """Internal helper for merge water type."""
     vals = []
     for _, attrs in parsed_rows:
         x = attrs.get("water_type")
@@ -204,6 +210,7 @@ def _merge_water_type(parsed_rows):
 
 
 def _weighted_mean(values, weights):
+    """Internal helper for weighted mean."""
     pairs = [(v, w) for v, w in zip(values, weights) if v is not None]
     if not pairs:
         return None
@@ -214,6 +221,7 @@ def _weighted_mean(values, weights):
 
 
 def _count_true_flags(parsed_rows, key):
+    """Internal helper for count true flags."""
     vals = []
     for _, attrs in parsed_rows:
         vals.append(1 if attrs.get(key) else 0)
@@ -221,6 +229,7 @@ def _count_true_flags(parsed_rows, key):
 
 
 def _merge_field_mode(parsed_rows, key):
+    """Internal helper for merge field mode."""
     vals = []
     for _, attrs in parsed_rows:
         x = attrs.get(key)

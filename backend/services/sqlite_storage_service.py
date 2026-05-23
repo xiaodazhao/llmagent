@@ -20,11 +20,13 @@ _SCHEMA_READY = False
 
 
 def _now_text() -> str:
+    """Return the current timestamp text."""
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @contextmanager
 def _connect():
+    """Open a SQLite connection for backend storage."""
     APP_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(APP_DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -38,6 +40,7 @@ def _connect():
 
 
 def ensure_storage_initialized() -> None:
+    """Ensure storage initialized."""
     global _SCHEMA_READY
 
     with _LOCK:
@@ -112,6 +115,7 @@ def ensure_storage_initialized() -> None:
 
 
 def _get_metadata(conn: sqlite3.Connection, key: str) -> str | None:
+    """Get metadata."""
     row = conn.execute(
         "SELECT value FROM app_metadata WHERE key = ?",
         (key,),
@@ -120,6 +124,7 @@ def _get_metadata(conn: sqlite3.Connection, key: str) -> str | None:
 
 
 def _set_metadata(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Internal helper for set metadata."""
     conn.execute(
         """
         INSERT INTO app_metadata (key, value, updated_at)
@@ -133,6 +138,7 @@ def _set_metadata(conn: sqlite3.Connection, key: str, value: str) -> None:
 
 
 def migrate_history_json_files() -> None:
+    """Migrate history json files."""
     ensure_storage_initialized()
 
     with _connect() as conn:
@@ -169,6 +175,7 @@ def migrate_history_json_files() -> None:
 
 
 def save_history_record_to_db(record: dict) -> Path:
+    """Save history record to db."""
     ensure_storage_initialized()
     migrate_history_json_files()
 
@@ -193,6 +200,7 @@ def save_history_record_to_db(record: dict) -> Path:
 
 
 def load_history_records_from_db(limit: int = 10, before_date: str | None = None) -> list[dict]:
+    """Load history records from db."""
     ensure_storage_initialized()
     migrate_history_json_files()
 
@@ -221,6 +229,7 @@ def load_history_records_from_db(limit: int = 10, before_date: str | None = None
 
 
 def save_agent_session(session_id: str, payload: dict | None = None, title: str | None = None) -> None:
+    """Save agent session."""
     ensure_storage_initialized()
     session_payload = serialize_for_json(payload or {})
     with _connect() as conn:
@@ -244,6 +253,7 @@ def save_agent_session(session_id: str, payload: dict | None = None, title: str 
 
 
 def load_agent_session(session_id: str) -> dict | None:
+    """Load agent session."""
     ensure_storage_initialized()
     with _connect() as conn:
         row = conn.execute(
@@ -276,6 +286,7 @@ def append_agent_message(
     session_title: str | None = None,
     session_payload: dict | None = None,
 ) -> int:
+    """Append agent message."""
     ensure_storage_initialized()
     message_payload = serialize_for_json(payload)
     save_agent_session(
@@ -309,6 +320,7 @@ def append_agent_message(
 
 
 def load_agent_messages(session_id: str, limit: int = 20) -> list[dict]:
+    """Load agent messages."""
     ensure_storage_initialized()
     with _connect() as conn:
         rows = conn.execute(
@@ -338,6 +350,7 @@ def load_agent_messages(session_id: str, limit: int = 20) -> list[dict]:
 
 
 def _sanitize_dataframe_records(df: pd.DataFrame) -> list[dict]:
+    """Internal helper for sanitize dataframe records."""
     if df.empty:
         return []
     normalized = df.where(pd.notna(df), None)
@@ -346,6 +359,7 @@ def _sanitize_dataframe_records(df: pd.DataFrame) -> list[dict]:
 
 
 def sync_evidence_dataframe_to_db(df: pd.DataFrame) -> None:
+    """Sync evidence dataframe to db."""
     ensure_storage_initialized()
     rows = _sanitize_dataframe_records(df)
 
@@ -382,6 +396,7 @@ def sync_evidence_dataframe_to_db(df: pd.DataFrame) -> None:
 
 
 def load_evidence_dataframe_from_db(csv_fallback_path: Path | None = None) -> pd.DataFrame:
+    """Load evidence dataframe from db."""
     ensure_storage_initialized()
 
     with _connect() as conn:
@@ -409,6 +424,7 @@ def load_evidence_dataframe_from_db(csv_fallback_path: Path | None = None) -> pd
 
 
 def load_file_cache_blob(namespace: str, source_path: str, mtime_ns: int, file_size: int) -> bytes | None:
+    """Load file cache blob."""
     ensure_storage_initialized()
     with _connect() as conn:
         row = conn.execute(
@@ -429,6 +445,7 @@ def save_file_cache_blob(
     file_size: int,
     value: Any,
 ) -> None:
+    """Save file cache blob."""
     ensure_storage_initialized()
     payload = sqlite3.Binary(pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL))
     with _connect() as conn:
@@ -452,6 +469,7 @@ def prune_stale_file_cache_entries(
     keep_mtime_ns: int,
     keep_file_size: int,
 ) -> None:
+    """Prune stale file cache entries."""
     ensure_storage_initialized()
     with _connect() as conn:
         conn.execute(
@@ -465,6 +483,7 @@ def prune_stale_file_cache_entries(
 
 
 def clear_file_cache_entries(namespace: str | None = None) -> None:
+    """Clear file cache entries."""
     ensure_storage_initialized()
     with _connect() as conn:
         if namespace is None:

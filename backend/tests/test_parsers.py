@@ -24,6 +24,7 @@ META = {
 
 
 def test_tsp_meta_and_conclusion_records_extract_key_ranges():
+    """Test tsp meta and conclusion records extract key ranges."""
     text = """
     伯舒拉岭隧道进口右线
     检测日期：2023年12月30日
@@ -58,6 +59,7 @@ def test_tsp_meta_and_conclusion_records_extract_key_ranges():
 
 
 def test_tsp_table2_row_parses_high_risk_segment_fields():
+    """Test tsp table2 row parses high risk segment fields."""
     row_data = {
         "mileage": "DyK36+620~DyK36+640",
         "params": (
@@ -87,6 +89,7 @@ def test_tsp_table2_row_parses_high_risk_segment_fields():
 
 
 def test_hsp_row_parser_extracts_anomaly_and_collapse_points():
+    """Test hsp row parser extracts anomaly and collapse points."""
     row_data = {
         "range": "DyK36+620~DyK36+640",
         "detect": "明显反射异常",
@@ -108,6 +111,7 @@ def test_hsp_row_parser_extracts_anomaly_and_collapse_points():
 
 
 def test_sketch_parser_marks_observed_drop_block_and_water(monkeypatch):
+    """Test sketch parser marks observed drop block and water."""
     sketch_text = """
     伯舒拉岭隧道进口右线洞身段地质素描记录表
     日期：2023年12月30日
@@ -118,13 +122,16 @@ def test_sketch_parser_marks_observed_drop_block_and_water(monkeypatch):
 
     class FakePage:
         def get_text(self):
+            """Handle get text."""
             return sketch_text
 
     class FakeDoc:
         def __iter__(self):
+            """Internal helper for iter."""
             return iter([FakePage()])
 
         def close(self):
+            """Handle close."""
             return None
 
     monkeypatch.setattr("fitz.open", lambda path: FakeDoc())
@@ -141,5 +148,6 @@ def test_sketch_parser_marks_observed_drop_block_and_water(monkeypatch):
 
 
 def test_sketch_collapse_flag_ignores_generic_safety_wording():
+    """Test sketch collapse flag ignores generic safety wording."""
     assert _extract_collapse_flag("施工中应防止掉块并加强支护") == 0
     assert _extract_collapse_flag("掌子面掉块明显") == 1

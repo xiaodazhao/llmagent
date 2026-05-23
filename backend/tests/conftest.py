@@ -11,6 +11,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 @pytest.fixture
 def isolated_sqlite_env(monkeypatch, tmp_path):
+    """Provide an isolated SQLite test environment."""
     import services.sqlite_storage_service as sqlite_storage_service
 
     db_path = tmp_path / "test_app.sqlite3"

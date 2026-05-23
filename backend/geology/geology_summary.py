@@ -123,12 +123,14 @@ def summarize_geology_segment_level(segment_df: pd.DataFrame):
 
 
 def geology_summary_to_text(geo_summary: dict):
+    """Handle geology summary to text."""
     if not geo_summary or not geo_summary.get("has_geology", False):
         return "本时段未进行地质融合分析。"
     return geo_summary.get("summary_text", "本时段已完成地质融合分析。")
 
 
 def _safe_load_attrs(x):
+    """Safely load serialized evidence attributes."""
     try:
         obj = json.loads(x)
         return obj if isinstance(obj, dict) else {}

@@ -52,6 +52,7 @@ def _get_google_client():
 
 
 def _call_google(prompt: str, model: str = DEFAULT_GOOGLE_MODEL) -> str:
+    """Call google."""
     client = _get_google_client()
     response = client.models.generate_content(
         model=model,
@@ -69,6 +70,7 @@ def _call_google(prompt: str, model: str = DEFAULT_GOOGLE_MODEL) -> str:
 
 
 def _call_deepseek(prompt: str, model: str = DEFAULT_DEEPSEEK_MODEL) -> str:
+    """Call deepseek."""
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
         raise RuntimeError("未配置 DEEPSEEK_API_KEY，请先根据 .env.example 创建 .env 文件。")

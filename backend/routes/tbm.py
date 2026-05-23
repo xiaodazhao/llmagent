@@ -48,6 +48,7 @@ DEBUG_PREFIX = "[TBM DEBUG]"
 
 
 def _date_from_csv_path(path: Path) -> str | None:
+    """Internal helper for date from csv path."""
     raw = path.name.replace("tbm_data_", "").replace(".csv", "")
     try:
         return datetime.strptime(raw, "%Y%m%d").strftime("%Y-%m-%d")
@@ -56,6 +57,7 @@ def _date_from_csv_path(path: Path) -> str | None:
 
 
 def _build_analysis_meta(path: Path, cache_hit: bool, resolved_date: str | None) -> dict:
+    """Build analysis meta."""
     return {
         "cache_hit": cache_hit,
         "resolved_date": resolved_date,
@@ -65,6 +67,7 @@ def _build_analysis_meta(path: Path, cache_hit: bool, resolved_date: str | None)
 
 
 def _collect_warnings(result: dict | None, extra_warnings: list[str] | None = None) -> list[str]:
+    """Collect warnings."""
     warnings = list((result or {}).get("warnings", []))
     if extra_warnings:
         warnings.extend(extra_warnings)
@@ -72,6 +75,7 @@ def _collect_warnings(result: dict | None, extra_warnings: list[str] | None = No
 
 
 def _summary_value(summary: dict | None, keys: list[str], default: Any):
+    """Internal helper for summary value."""
     if not isinstance(summary, dict):
         return default
     for key in keys:
@@ -81,6 +85,7 @@ def _summary_value(summary: dict | None, keys: list[str], default: Any):
 
 
 def _stringify_dict_keys(value: Any) -> Any:
+    """Internal helper for stringify dict keys."""
     if isinstance(value, dict):
         return {str(key): _stringify_dict_keys(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -89,6 +94,7 @@ def _stringify_dict_keys(value: Any) -> Any:
 
 
 def _debug_log(event: str, **fields: Any) -> None:
+    """Internal helper for debug log."""
     ordered = []
     for key, value in fields.items():
         if value is None:
@@ -99,22 +105,26 @@ def _debug_log(event: str, **fields: Any) -> None:
 
 
 def _debug_start(feature: str, **fields: Any) -> float:
+    """Internal helper for debug start."""
     started = perf_counter()
     _debug_log(f"{feature}.start", **fields)
     return started
 
 
 def _debug_success(feature: str, started: float, **fields: Any) -> None:
+    """Internal helper for debug success."""
     duration_ms = round((perf_counter() - started) * 1000, 1)
     _debug_log(f"{feature}.success", duration_ms=duration_ms, **fields)
 
 
 def _debug_failure(feature: str, started: float, exc: Exception, **fields: Any) -> None:
+    """Internal helper for debug failure."""
     duration_ms = round((perf_counter() - started) * 1000, 1)
     _debug_log(f"{feature}.failure", duration_ms=duration_ms, error=str(exc), **fields)
 
 
 def _build_summary_payload(result: dict) -> dict:
+    """Build summary payload."""
     stats = result["stats"]
     geo_summary = result.get("geo_summary_segment", {})
     return {
@@ -133,6 +143,7 @@ def _build_summary_payload(result: dict) -> dict:
 
 
 def _build_state_payload(result: dict) -> dict:
+    """Build state payload."""
     state_segments = result.get("state_segments") or {}
     state_labels = result.get("state_labels") or {}
     llm_summary = result.get("llm_summary") or {}
@@ -172,6 +183,7 @@ def _build_state_payload(result: dict) -> dict:
 
 
 def _build_geology_payload(result: dict) -> dict:
+    """Build geology payload."""
     segment_df = result.get("segment_df", pd.DataFrame())
     typical_df = result.get("typical_segments_df", pd.DataFrame())
 
@@ -263,6 +275,7 @@ def _build_geology_payload(result: dict) -> dict:
 
 
 def _build_history_payload(current_date: str, result: dict, limit: int) -> dict:
+    """Build history payload."""
     current_record = build_history_record(current_date, result)
     history_records = load_history_records(limit=limit, before_date=current_date)
     history_comparison = build_history_comparison(current_record, history_records)
@@ -279,6 +292,7 @@ def register_tbm_routes(
     build_risk_profile,
     build_speed_profile,
 ):
+    """Handle register tbm routes."""
     router = APIRouter(prefix="/api/tbm", tags=["tbm"])
     tbm_supervisor_agent = TBMSupervisorAgent(
         analyze_tbm_data=analyze_tbm_data,
@@ -287,9 +301,11 @@ def register_tbm_routes(
     )
 
     def _resolve_daily_path(date: Optional[str] = None) -> Path:
+        """Resolve daily path."""
         return get_csv_path_by_date(date) if date else get_latest_csv_path()
 
     def _get_daily_analysis(date: Optional[str] = None) -> tuple[Path, dict, list[str], dict, str | None]:
+        """Get daily analysis."""
         path = _resolve_daily_path(date)
         result, cache_hit = get_or_compute_file_cache(
             DAILY_ANALYSIS_CACHE_NAMESPACE,
@@ -301,6 +317,7 @@ def register_tbm_routes(
         return path, result, _collect_warnings(result), meta, resolved_date
 
     def _internal_error(prefix: str, exc: Exception, *, status_code: int = 500, meta: dict | None = None):
+        """Internal helper for internal error."""
         print(f"[{prefix}] {exc}")
         return api_error(
             f"{prefix}：{exc}",
@@ -311,6 +328,7 @@ def register_tbm_routes(
 
     @router.get("/dates", response_model=ApiEnvelope[DatesPayload])
     def get_available_dates():
+        """Get available dates."""
         started = _debug_start("dates")
         try:
             dates = []
@@ -327,6 +345,7 @@ def register_tbm_routes(
 
     @router.post("/agent_v2")
     def run_tbm_supervisor_agent(req: AgentRequest):
+        """Run tbm supervisor agent."""
         started = _debug_start(
             "agent_v2",
             date=req.date,
@@ -363,6 +382,7 @@ def register_tbm_routes(
 
     @router.get("/agent_v2/capabilities")
     def tbm_supervisor_agent_capabilities():
+        """Handle tbm supervisor agent capabilities."""
         started = _debug_start("agent_v2.capabilities")
         payload = tbm_supervisor_agent.capabilities()
         _debug_success(
@@ -374,6 +394,7 @@ def register_tbm_routes(
 
     @router.get("/agent_v2/session", response_model=ApiEnvelope[AgentSessionPayload])
     def tbm_supervisor_agent_session(session_id: str, limit: int = 30):
+        """Handle tbm supervisor agent session."""
         started = _debug_start("agent_v2.session", session_id=session_id, limit=limit)
         try:
             session = load_agent_session(session_id)
@@ -409,6 +430,7 @@ def register_tbm_routes(
 
     @router.post("/evidence/import", response_model=ApiEnvelope[EvidenceImportPayload])
     def import_evidence_api(req: EvidenceImportRequest):
+        """Handle import evidence api."""
         started = _debug_start(
             "evidence.import",
             path_count=len(req.paths),
@@ -444,6 +466,7 @@ def register_tbm_routes(
 
     @router.post("/report", response_model=ApiEnvelope[ReportPayload])
     def generate_daily_report(req: DailyReportRequest):
+        """Generate daily report."""
         started = _debug_start("report.daily", date=req.date)
         try:
             _, result, warnings, meta, _ = _get_daily_analysis(req.date)
@@ -486,6 +509,7 @@ def register_tbm_routes(
 
     @router.get("/summary", response_model=ApiEnvelope[SummaryPayload])
     def tbm_summary(date: Optional[str] = None):
+        """Handle tbm summary."""
         started = _debug_start("summary", date=date)
         try:
             _, result, warnings, meta, _ = _get_daily_analysis(date)
@@ -508,6 +532,7 @@ def register_tbm_routes(
 
     @router.get("/state", response_model=ApiEnvelope[StatePayload])
     def state_api(date: Optional[str] = None):
+        """Handle state api."""
         started = _debug_start("state", date=date)
         try:
             _, result, warnings, meta, _ = _get_daily_analysis(date)
@@ -530,6 +555,7 @@ def register_tbm_routes(
 
     @router.get("/gas", response_model=ApiEnvelope[dict[str, Any]])
     def gas_api(date: Optional[str] = None):
+        """Handle gas api."""
         started = _debug_start("gas", date=date)
         try:
             _, result, warnings, meta, _ = _get_daily_analysis(date)
@@ -551,6 +577,7 @@ def register_tbm_routes(
 
     @router.get("/geology", response_model=ApiEnvelope[GeologyPayload])
     def geology_api(date: Optional[str] = None):
+        """Handle geology api."""
         started = _debug_start("geology", date=date)
         try:
             _, result, warnings, meta, _ = _get_daily_analysis(date)
@@ -574,6 +601,7 @@ def register_tbm_routes(
 
     @router.get("/digital_twin_state", response_model=ApiEnvelope[DigitalTwinPayload])
     def digital_twin_state_api(date: Optional[str] = None):
+        """Handle digital twin state api."""
         started = _debug_start("digital_twin_state", date=date)
         try:
             _, result, warnings, meta, resolved_date = _get_daily_analysis(date)
@@ -598,6 +626,7 @@ def register_tbm_routes(
 
     @router.get("/history_memory", response_model=ApiEnvelope[HistoryMemoryPayload])
     def history_memory_api(date: Optional[str] = None, limit: int = 10):
+        """Handle history memory api."""
         started = _debug_start("history_memory", date=date, limit=limit)
         try:
             _, result, warnings, meta, resolved_date = _get_daily_analysis(date)
@@ -620,6 +649,7 @@ def register_tbm_routes(
 
     @router.post("/report_by_time", response_model=ApiEnvelope[ReportPayload])
     def generate_report_by_time(req: TimeWindowRequest):
+        """Generate report by time."""
         start = req.start_time.replace("T", " ")
         end = req.end_time.replace("T", " ")
         date = start.split(" ")[0]
@@ -679,6 +709,7 @@ def register_tbm_routes(
 
     @router.get("/risk_profile", response_model=ApiEnvelope[RiskProfilePayload])
     def risk_profile_api(date: Optional[str] = None):
+        """Handle risk profile api."""
         started = _debug_start("risk_profile", date=date)
         try:
             _, result, warnings, meta, resolved_date = _get_daily_analysis(date)

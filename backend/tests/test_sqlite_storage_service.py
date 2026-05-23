@@ -5,6 +5,7 @@ import pandas as pd
 
 
 def test_history_records_are_migrated_from_json_and_persisted(isolated_sqlite_env):
+    """Test history records are migrated from json and persisted."""
     sqlite_storage_service, _, history_dir = isolated_sqlite_env
 
     legacy_record = {
@@ -30,6 +31,7 @@ def test_history_records_are_migrated_from_json_and_persisted(isolated_sqlite_en
 
 
 def test_evidence_dataframe_and_file_cache_round_trip(isolated_sqlite_env, tmp_path):
+    """Test evidence dataframe and file cache round trip."""
     sqlite_storage_service, _, _ = isolated_sqlite_env
 
     evidence_df = pd.DataFrame(
@@ -88,6 +90,7 @@ def test_evidence_dataframe_and_file_cache_round_trip(isolated_sqlite_env, tmp_p
 
 
 def test_agent_session_messages_round_trip(isolated_sqlite_env):
+    """Test agent session messages round trip."""
     sqlite_storage_service, _, _ = isolated_sqlite_env
 
     sqlite_storage_service.save_agent_session(

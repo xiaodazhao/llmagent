@@ -7,6 +7,7 @@ from services import evidence_import_service as eis
 
 
 def _record(evidence_id: str, *, start_num: float, end_num: float) -> EvidenceRecord:
+    """Internal helper for record."""
     return EvidenceRecord(
         evidence_id=evidence_id,
         source_type="tsp",
@@ -26,6 +27,7 @@ def _record(evidence_id: str, *, start_num: float, end_num: float) -> EvidenceRe
 
 
 def test_import_evidence_files_skips_existing_and_collects_errors(monkeypatch, tmp_path):
+    """Test import evidence files skips existing and collects errors."""
     pdf_ok = tmp_path / "sample_tsp.pdf"
     pdf_fail = tmp_path / "sample_hsp.pdf"
     pdf_ok.write_text("ok", encoding="utf-8")
@@ -58,6 +60,7 @@ def test_import_evidence_files_skips_existing_and_collects_errors(monkeypatch, t
     monkeypatch.setattr(eis, "collect_pdf_paths", lambda paths, recursive=False: [pdf_ok, pdf_fail])
 
     def fake_parse(pdf_path, source_type=None):
+        """Handle fake parse."""
         if pdf_path == pdf_ok:
             return "tsp", [
                 _record("dup_1", start_num=36100.0, end_num=36110.0),
@@ -86,6 +89,7 @@ def test_import_evidence_files_skips_existing_and_collects_errors(monkeypatch, t
 
 
 def test_import_evidence_files_replace_existing_refreshes_rows(monkeypatch, tmp_path):
+    """Test import evidence files replace existing refreshes rows."""
     pdf_ok = tmp_path / "sample_tsp.pdf"
     pdf_ok.write_text("ok", encoding="utf-8")
     existing_csv = tmp_path / "evidence_db.csv"

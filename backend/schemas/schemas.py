@@ -21,6 +21,7 @@ class EvidenceRecord:
     raw_text: Optional[str] = None
 
     def attrs(self) -> Dict[str, Any]:
+        """Handle attrs."""
         try:
             return json.loads(self.attrs_json)
         except:

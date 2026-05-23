@@ -10,6 +10,7 @@ def build_prompt_timewindow(
     geo_text: str,
     llm_summary: dict
 ) -> str:
+    """Build prompt timewindow."""
     forward_risk_text = llm_summary.get("前方风险提示文本", "无")
 
     return f"""

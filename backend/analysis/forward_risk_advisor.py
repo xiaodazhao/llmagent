@@ -12,6 +12,7 @@ RISK_SCORE_MAP = {
 
 
 def _safe_load_attrs(x):
+    """Safely load serialized evidence attributes."""
     try:
         if pd.isna(x):
             return {}
@@ -33,6 +34,7 @@ def _format_dk(chainage):
 
 
 def _normalize_hazard(attrs):
+    """Normalize hazard."""
     hazards = []
     if attrs.get("water_flag"):
         hazards.append("出水")

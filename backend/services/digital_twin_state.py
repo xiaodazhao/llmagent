@@ -4,6 +4,7 @@ from utils.chainage_utils import format_chainage_dk
 
 
 def _safe_float(value):
+    """Safely convert a value to float."""
     try:
         if pd.isna(value):
             return None
@@ -13,6 +14,7 @@ def _safe_float(value):
 
 
 def _safe_timestamp(value):
+    """Safely format a timestamp value."""
     try:
         if pd.isna(value):
             return None
@@ -22,6 +24,7 @@ def _safe_timestamp(value):
 
 
 def _collect_gas_exceed_types(gas_stats: dict) -> list[str]:
+    """Collect gas exceed types."""
     gas_all = gas_stats.get("all", {}) if isinstance(gas_stats, dict) else {}
     out = []
     for gas, stat in gas_all.items():
@@ -31,6 +34,7 @@ def _collect_gas_exceed_types(gas_stats: dict) -> list[str]:
 
 
 def _dominant_operation_state(stats: dict) -> str:
+    """Internal helper for dominant operation state."""
     candidates = {
         "稳定掘进": stats.get("work_total_min", 0),
         "停机": stats.get("stop_total_min", 0),
