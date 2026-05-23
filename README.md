@@ -5,6 +5,9 @@
 ## 文档导航
 
 - [项目总说明](docs/research_overview.md)
+- [最终版方法框架](docs/final_method_framework.md)
+- [实验设计与组织方案](docs/experiment_plan.md)
+- [论文大纲建议](docs/paper_outline.md)
 - [后端清单](docs/backend_inventory.md)
 - [Agent 设计说明](docs/agent_v2.md)
 - [证据导入说明](docs/evidence_import.md)
