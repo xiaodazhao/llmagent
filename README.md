@@ -1,6 +1,12 @@
-# TBM 智能分析平台
+# 数字孪生和大语言模型协同驱动的 TBM 施工报告自动化生成
 
-一个面向 TBM 隧道施工场景的全栈分析系统，打通了 `TBM 日运行 CSV`、`TSP/HSP/洞身素描 PDF`、历史分析记录和 LLM 报告链路，用于完成施工状态识别、地质风险融合、风险-响应耦合分析、历史对比和智能日报生成。
+这是一个面向 TBM 隧道施工场景的研究型全栈系统。项目打通了 `TBM 日运行 CSV`、`TSP/HSP/洞身素描 PDF`、历史分析记录和 LLM 报告链路，目标不是让大模型直接读取原始工程数据，而是先构建轻量化数字孪生状态，再驱动大语言模型自动生成工程日报和时段分析报告。
+
+## 文档导航
+
+- [项目正式说明文档](docs/research_overview.md)
+- [证据导入说明](docs/evidence_import.md)
+- [Agent 设计说明](docs/agent_v2.md)
 
 ## 项目定位
 
@@ -190,6 +196,7 @@ Frontend/
   vite.config.js            构建与拆包配置
 
 docs/
+  research_overview.md      项目正式说明文档
   agent_v2.md               Agent 设计说明
   evidence_import.md        证据导入说明
 ```
