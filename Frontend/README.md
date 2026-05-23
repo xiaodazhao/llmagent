@@ -1,17 +1,18 @@
 # Frontend
 
-前端基于 `React + Vite`，负责把后端分析结果组织成一个可操作的 TBM 施工分析看板。
+前端基于 `React + Vite`，负责把后端分析结果组织成一个可交互的 TBM 施工分析看板。
 
-## 主要功能
+## 功能模块
 
-- 日期选择与总览看板
+- 日期选择与总览驾驶舱
+- 工况概览
 - 施工状态识别
 - 地质融合与耦合分析
 - 气体监测
 - 风险 / 速度剖面
-- LLM 日报与时间窗报告
+- 智能日报与时间窗分析
 - Agent 问答
-- 证据库增量导入
+- 证据 PDF 导入
 
 ## 启动
 
@@ -40,11 +41,11 @@ npm.cmd run build
 VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-## 目录
+## 目录结构
 
 ```text
 src/api/                  接口封装
-src/features/dashboard/   仪表盘壳层
+src/features/dashboard/   仪表盘外壳
 src/features/summary/     工况概览
 src/features/state/       施工状态识别
 src/features/geology/     地质融合分析
@@ -57,5 +58,5 @@ src/features/evidence/    证据导入
 
 ## 说明
 
-- 当前已经做了懒加载和基础拆包，首页加载会比之前更轻。
-- 构建通过后会在 `Frontend/dist/` 生成产物。
+- 当前已经做了懒加载与基础拆包，首页加载比早期版本更轻。
+- 构建通过后，产物会生成在 `Frontend/dist/`。

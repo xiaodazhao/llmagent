@@ -39,6 +39,9 @@ from utils.time_window_utils import load_df_by_time
 
 
 DAILY_ANALYSIS_CACHE_NAMESPACE = "tbm_daily_analysis"
+# Backward compatibility for summaries persisted before the UTF-8 cleanup.
+LEGACY_VALID_SAMPLE_KEYS = ["有效状态样本数", "鏈夋晥鐘舵€佹牱鏈暟"]
+LEGACY_STATE_CONFIG_KEYS = ["状态识别配置", "鐘舵€佽瘑鍒厤缃�"]
 
 
 def _date_from_csv_path(path: Path) -> str | None:
@@ -132,9 +135,9 @@ def _build_state_payload(result: dict) -> dict:
         "efficiency": serialize_for_json(efficiency),
         "state_labels": serialize_for_json(_stringify_dict_keys(state_labels)),
         "state_stats": serialize_for_json(_stringify_dict_keys(result.get("state_stats", {}))),
-        "valid_samples": int(_summary_value(llm_summary, ["有效状态样本数", "鏈夋晥鐘舵€佹牱鏈暟"], 0) or 0),
+        "valid_samples": int(_summary_value(llm_summary, LEGACY_VALID_SAMPLE_KEYS, 0) or 0),
         "state_config": serialize_for_json(
-            _summary_value(llm_summary, ["状态识别配置", "鐘舵€佽瘑鍒厤缃�"], {})
+            _summary_value(llm_summary, LEGACY_STATE_CONFIG_KEYS, {})
         ),
     }
 
