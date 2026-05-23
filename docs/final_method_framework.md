@@ -21,7 +21,29 @@
 3. 由该 Twin 为大语言模型提供 state-aware prompt；
 4. 最终生成可解释、可追溯、可约束的正式施工报告。
 
-## 3. 核心主张
+## 3. 三个主贡献
+
+为了避免方法框架显得过大、主线分散，最终版论文建议只保留三个核心贡献。
+
+### Contribution 1
+
+提出 `Construction State Twin`，用于将 TBM 多源施工数据统一表示为一个可递推更新的状态体。
+
+### Contribution 2
+
+设计 `GRS / RAI / GRCI` 三类状态指标，实现地质关注、施工响应异常和地质-施工耦合关注的状态化表达。
+
+### Contribution 3
+
+提出 `State-aware Prompting` 与 `Traceability Evaluation`，使 LLM 报告生成具备事实约束、风险措辞约束和证据可追溯性。
+
+说明：
+
+- `Agent` 不应作为主贡献；
+- `Agent` 在论文中更适合作为 `an interactive extension of CST`；
+- 动态更新应作为 Twin 的形式化目标和扩展能力，而不是第一主实验的核心卖点。
+
+## 4. 核心主张
 
 最终版方法不再把系统理解为：
 
@@ -33,7 +55,7 @@
 
 也就是说，LLM 不是直接面对原始工程数据，而是面对经过状态组织、空间对齐、证据约束后的中间状态表示。
 
-## 4. 方法总框架
+## 5. 方法总框架
 
 最终版方法可以概括为：
 
@@ -56,11 +78,17 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 - `Gas_t`：当前安全监测数据；
 - `U`：状态更新算子。
 
-## 5. Construction State Twin 的分层定义
+需要特别说明的是：
+
+- 该递推公式是最终版方法的形式化目标；
+- 当前系统已经具备历史比较、状态摘要和会话记忆等基础；
+- 但第一轮实验中，动态更新更适合作为 `case study` 和 `state continuity analysis`，而不是最先上量的主对比实验。
+
+## 6. Construction State Twin 的分层定义
 
 建议将 `CST_t` 定义为一个由多个子状态组成的分层状态体，而不是单一分数或单一 JSON 摘要。
 
-### 5.1 Temporal State
+### 6.1 Temporal State
 
 时间状态用于描述当前分析窗口的时间边界和持续关系，包括：
 
@@ -69,7 +97,7 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 - 持续时长；
 - 当前窗口在历史序列中的位置。
 
-### 5.2 Spatial State
+### 6.2 Spatial State
 
 空间状态用于描述施工推进在里程轴上的位置，包括：
 
@@ -79,7 +107,7 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 - 当前推进长度；
 - 前方关注区间。
 
-### 5.3 Operation State
+### 6.3 Operation State
 
 运行状态用于描述设备和施工过程本身，包括：
 
@@ -90,7 +118,7 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 - 施工状态识别结果；
 - 效率摘要。
 
-### 5.4 Geological State
+### 6.4 Geological State
 
 地质状态用于描述当前掌子面与前方区段的结构化地质信息，包括：
 
@@ -102,7 +130,7 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 - 证据强度；
 - 不确定性。
 
-### 5.5 Response State
+### 6.5 Response State
 
 响应状态用于描述施工对环境和工况变化的异常响应，包括：
 
@@ -112,7 +140,7 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 - 参数异常；
 - 关键异常参数方向。
 
-### 5.6 Attention State
+### 6.6 Attention State
 
 关注状态用于支撑报告重点排序和前方提示，包括：
 
@@ -123,7 +151,7 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 - 前方关注区段；
 - 当前建议重点描述对象。
 
-### 5.7 Provenance and Memory State
+### 6.7 Provenance and Memory State
 
 追溯与记忆状态用于支持历史对比、问答连续性和证据追溯，包括：
 
@@ -133,7 +161,70 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 - 历史趋势摘要；
 - Agent 会话上下文。
 
-## 6. 状态更新算子 U 的结构
+## 7. CST 的标准 JSON Schema
+
+为了让 `CST` 不停留在概念层，建议在实验层和方法层统一采用一个标准化的状态格式。下面给出一个推荐的最小可执行 schema。
+
+```json
+{
+  "case_id": "C01",
+  "date": "2023-12-30",
+  "time_window": {
+    "start_time": "2023-12-30 00:00:00",
+    "end_time": "2023-12-30 23:59:59",
+    "duration_min": 1440
+  },
+  "temporal_state": {
+    "sample_count": 0,
+    "analysis_mode": "daily"
+  },
+  "spatial_state": {
+    "chainage_start": 0.0,
+    "chainage_end": 0.0,
+    "face_chainage": 0.0,
+    "advance_length": 0.0,
+    "forward_window": []
+  },
+  "operation_state": {
+    "main_state": "",
+    "working_duration_min": 0.0,
+    "stoppage_duration_min": 0.0,
+    "state_switch_count": 0,
+    "efficiency_summary": ""
+  },
+  "geological_state": {
+    "face_condition": "",
+    "segment_grade": "",
+    "hazards": [],
+    "evidence_count": 0,
+    "uncertainty": ""
+  },
+  "response_state": {
+    "RAI": 0.0,
+    "anomaly_type": "",
+    "key_parameters": []
+  },
+  "attention_state": {
+    "GRS": 0.0,
+    "GRCI": 0.0,
+    "high_attention_segments": [],
+    "forward_attention": []
+  },
+  "provenance_state": {
+    "evidence_list": [],
+    "state_update_sources": [],
+    "previous_change_summary": ""
+  }
+}
+```
+
+这个 schema 的目的不是约束每个字段都一次到位，而是：
+
+- 明确 Twin 必须包含哪些状态层；
+- 为实验脚本和可追溯性实验提供统一输入格式；
+- 为论文中的 `Construction State Twin` 定义提供可执行实例。
+
+## 8. 状态更新算子 U 的结构
 
 为了让 `CST_t = U(CST_{t-1}, ...)` 不只是口号，建议将更新算子拆成五个明确步骤。
 
@@ -178,13 +269,13 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 - `Answer_t = Q(CST_t, Query_t, Memory_t)`：Agent 问答；
 - `Trace_t = T(CST_t, Claims_t)`：证据追溯。
 
-## 7. 三个核心指标在最终框架中的位置
+## 9. 三个核心指标在最终框架中的位置
 
 在最终版方法框架中，`GRS / RAI / GRCI` 不应作为孤立指标出现，而应作为 `CST_t` 的关键子状态。
 
-### 7.1 GRS
+### 9.1 GRS
 
-`GRS` 用于表征区段级地质关注度。
+`GRS` 建议在论文中统一解释为 `Geological Attention Score`，用于表征区段级地质关注度，而不是直接预测地质灾害。
 
 在当前代码基础上，建议保留以下定义方向：
 
@@ -197,7 +288,7 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 其角色是：  
 **把已有地质证据压缩成 Twin 内部可用的 Attention State。**
 
-### 7.2 RAI
+### 9.2 RAI
 
 `RAI` 用于表征区段级施工响应异常度。
 
@@ -211,7 +302,7 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 其角色是：  
 **把施工时序中的异常响应压缩成 Twin 内部的 Response State。**
 
-### 7.3 GRCI
+### 9.3 GRCI
 
 `GRCI` 用于表征地质关注与施工响应之间的同步性、滞后性和一致性。
 
@@ -226,7 +317,59 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 其角色是：  
 **在 Twin 内部完成先验关注与后验响应的交叉验证。**
 
-## 8. 报告生成在最终框架中的位置
+## 10. State-Aware Prompt 的正式定义
+
+为了避免 `prompt` 被理解成普通 prompt engineering，建议在方法层将其形式化为四部分：
+
+\[
+Prompt_t = \{Role\ Instruction,\ CST\ Summary,\ Writing\ Constraints,\ Output\ Schema\}
+\]
+
+### 10.1 Role Instruction
+
+指定模型身份，例如：
+
+- 你是 TBM 施工技术报告撰写助手；
+- 你需要使用正式工程报告语体；
+- 你必须基于给定状态和证据生成内容。
+
+### 10.2 CST Summary
+
+将 `CST_t` 中与当前报告任务最相关的状态摘要组织为 prompt 输入，例如：
+
+- 时间与里程范围；
+- 工况与效率摘要；
+- 当前掌子面情况；
+- 前方关注状态；
+- `GRS / RAI / GRCI` 重点区段；
+- 气体与历史对比摘要。
+
+### 10.3 Writing Constraints
+
+建议固定包含以下约束：
+
+1. Only describe the specified date or time window.
+2. Separate current face observations from forward geological predictions.
+3. Use cautious wording for risk-related descriptions.
+4. Do not claim unsupported hazards.
+5. Every key conclusion should be traceable to the provided CST evidence.
+
+### 10.4 Output Schema
+
+约束报告输出结构，例如：
+
+- 执行摘要；
+- 总体运行情况；
+- 工况统计；
+- 施工状态与效率；
+- 地质情况；
+- 气体安全；
+- 前方提示；
+- 结论与建议。
+
+这样，`State-aware Prompt` 就不是普通“写得更长的提示词”，而是一个由状态摘要、写作约束和输出结构共同定义的受控生成接口。
+
+## 11. 报告生成在最终框架中的位置
 
 最终版方法应明确：报告不是由原始数据直接生成，而是由 Twin 驱动生成。
 
@@ -258,7 +401,7 @@ Prompt 不是普通用户指令，而是：
 - 不夸大风险；
 - 尽量做到结论可追溯。
 
-## 9. Agent 在最终框架中的位置
+## 12. Agent 在最终框架中的位置
 
 Agent 不是最终方法的核心贡献，但可以自然地作为 `CST_t` 的交互式读取接口。
 
@@ -272,7 +415,7 @@ Answer_t = \mathcal{Q}(CST_t, Query_t, Memory_t)
 - 对历史状态的连续追问；
 - 对关键证据和重点区段的解释层。
 
-## 10. 与当前实现的关系
+## 13. 与当前实现的关系
 
 ### 10.1 已具备基础的部分
 
@@ -296,7 +439,7 @@ Answer_t = \mathcal{Q}(CST_t, Query_t, Memory_t)
 - 将追溯关系从功能级说明提升为实验级定义；
 - 将多种下游任务统一解释为对同一个 `CST_t` 的不同读取方式。
 
-## 11. 最终版方法的一句话定义
+## 14. 一句话定义
 
 本研究的最终版方法可以概括为：
 

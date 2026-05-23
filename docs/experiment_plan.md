@@ -69,7 +69,19 @@ experiments/
 - `coupled_attention`：`GRS` 和 `RAI` 同时高，`GRCI` 高；
 - `gas_attention`：气体波动或接近阈值。
 
-### 4.3 Case 清单输出
+### 4.3 Case 选择规则
+
+为了避免 case selection 被理解为主观挑选，建议在实验中明确使用以下规则：
+
+1. `normal`：`GRS`、`RAI`、`GRCI` 均低，且无显著气体关注；
+2. `geology_attention`：`GRS` 高，`RAI` 不一定高；
+3. `response_anomaly`：`RAI` 高；
+4. `coupled_attention`：`GRS` 和 `RAI` 同时高，且 `GRCI` 高；
+5. `gas_attention`：气体监测存在明显波动或接近阈值。
+
+这样可以保证实验集不是“挑好看的案例”，而是按状态特征规则抽取的代表性 case。
+
+### 4.4 Case 清单输出
 
 `00_prepare_cases.py` 的输出建议为：
 
@@ -136,7 +148,7 @@ experiments/outputs/cases/case_list.csv
 不提供：
 
 - Twin 状态；
-- 统一里程状态组织；
+- 显式的统一里程状态组织；
 - `GRS / RAI / GRCI`；
 - 强约束 prompt。
 
@@ -205,7 +217,7 @@ experiments/outputs/cases/case_list.csv
 
 #### w/o Spatial Alignment
 
-不做统一里程对齐，只给摘要文本。  
+保留 PLC 摘要和地质文本摘要，但不显式提供“区段—里程—证据—施工响应”的结构化空间映射。  
 用于观察“统一里程状态组织”对报告的贡献。
 
 #### w/o Prompt Constraints
@@ -289,20 +301,28 @@ experiments/outputs/tables/traceability_<case_id>.csv
 - `is_supported`
 - `error_type`
 
-## 9. 实验五：动态状态更新实验
+## 9. 实验五：动态状态更新案例分析
 
-### 9.1 目标
+### 9.1 定位
+
+动态更新很重要，但不建议作为第一批最重的主实验。  
+更稳妥的做法是：
+
+- 在方法章节中保留递推表达 `CST_t = U(CST_{t-1}, ...)`；
+- 在实验章节中先把它做成 `case study` 和 `state continuity analysis`。
+
+### 9.2 目标
 
 证明 `CST_t` 不只是一次性快照，而是一个随施工推进动态更新的状态体。
 
-### 9.2 需要验证的问题
+### 9.3 需要验证的问题
 
 1. 状态是否能从 `CST_{t-1}` 递推到 `CST_t`；
 2. 前方关注、重点区段和异常趋势是否能在相邻状态中连续迁移；
 3. 历史对比是否真实反映状态变化；
 4. Agent 是否能围绕连续状态进行追问和解释。
 
-### 9.3 建议验证方式
+### 9.4 建议验证方式
 
 #### 状态连续性验证
 
@@ -401,9 +421,70 @@ experiments/outputs/tables/traceability_<case_id>.csv
 - 可读性；
 - 是否可用于实际汇报。
 
-如果前期很难组织专家评分，第一阶段可先完成 `ICS / FCS / TS`，后续再补 `RDR / EOR`。
+如果前期很难组织专家评分，第一阶段建议先完成：
 
-## 11. 推荐的实验脚本职责
+- `ICS`
+- `FCS`
+- `TS`
+
+后续再补：
+
+- `RDR`
+- `EOR`
+
+也就是说，最低可投稿的一版实验组合应优先覆盖：
+
+- 主对比实验：`ICS / FCS / TS`
+- 消融实验：`ICS / FCS / TS`
+- 典型案例：追溯表
+
+## 11. 人工评价表设计
+
+建议提前准备一个 `evaluation_sheet.xlsx` 或 `evaluation_sheet.csv`，避免后续人工评分混乱。
+
+推荐字段包括：
+
+- `case_id`
+- `method`
+- `reviewer_id`
+- `ICS_operation`
+- `ICS_geology`
+- `ICS_gas`
+- `ICS_forward`
+- `factual_errors_count`
+- `key_facts_count`
+- `unsupported_claims_count`
+- `key_claims_count`
+- `risk_overstatement_count`
+- `RDR_score`
+- `EOR_score`
+- `comments`
+
+后续可据此自动计算：
+
+- `ICS`
+- `FCS`
+- `TS`
+- `RDR`
+- `EOR`
+
+## 12. 结果统计呈现方式
+
+主表格建议默认采用：
+
+`mean ± std`
+
+例如：
+
+| Method | ICS | FCS | TS |
+| --- | --- | --- | --- |
+| Template | 0.72 ± 0.08 | 0.91 ± 0.05 | 0.76 ± 0.10 |
+| Direct-LLM | 0.81 ± 0.12 | 0.74 ± 0.15 | 0.48 ± 0.18 |
+| CST-LLM | 0.93 ± 0.04 | 0.95 ± 0.03 | 0.90 ± 0.06 |
+
+如果 case 数量达到 `10-12` 个以上，可选做简单显著性检验，例如 `Wilcoxon signed-rank test`，但这不是第一阶段的硬要求。
+
+## 13. 推荐的实验脚本职责
 
 ### 11.1 `00_prepare_cases.py`
 
@@ -466,7 +547,7 @@ experiments/outputs/tables/traceability_<case_id>.csv
 
 - 建立报告关键结论与状态/证据的映射表。
 
-## 12. 图表建议
+## 14. 图表建议
 
 ### 图
 
@@ -496,7 +577,7 @@ experiments/outputs/tables/traceability_<case_id>.csv
 3. 主实验结果表
 4. 典型案例追溯表
 
-## 13. 推荐执行顺序
+## 15. 推荐执行顺序
 
 ### 第一阶段：最小可运行实验集
 
@@ -517,7 +598,7 @@ experiments/outputs/tables/traceability_<case_id>.csv
 2. 细化多源贡献实验；
 3. 补 `RDR / EOR`。
 
-## 14. 一句话总结
+## 16. 一句话总结
 
 实验层的核心不是再加功能，而是证明：
 

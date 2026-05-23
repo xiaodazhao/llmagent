@@ -33,6 +33,14 @@
 4. Twin 为 LLM 提供 state-aware prompt；
 5. 由此得到更完整、更一致、更可追溯的自动化施工报告。
 
+为了避免主线发散，全文建议只收敛为三个主贡献：
+
+1. `Construction State Twin`
+2. `GRS / RAI / GRCI` 状态指标
+3. `State-aware Prompt + Traceability Evaluation`
+
+`Agent` 不作为主贡献，只作为 `an interactive extension of CST` 出现在方法扩展或系统扩展部分。
+
 ## 4. 建议章节结构
 
 ### Abstract
@@ -141,6 +149,12 @@ CST_t = U(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 Report_t = G(CST_t, Prompt_t)
 \]
 
+这里建议在写作中明确：
+
+- 递推更新公式属于方法主张；
+- 第一轮实验中，动态更新优先以 `case study` 和 `state continuity analysis` 呈现；
+- 不必一开始就将其写成最重的量化主实验。
+
 #### 3.2 Multi-Source Data Structuring
 
 写：
@@ -179,6 +193,7 @@ Report_t = G(CST_t, Prompt_t)
 
 这里要明确：
 
+- `GRS`：建议在论文中统一解释为 `Geological Attention Score`，并强调其不直接预测灾害真值
 - `GRS`：归一化 + 平权聚合 + 高斯平滑 + 动态修正
 - `RAI`：`Isolation Forest` + 辅助异常项 + 常规停顿折减
 - `GRCI`：同步、滞后、变化、一致性、来源修正
@@ -188,6 +203,7 @@ Report_t = G(CST_t, Prompt_t)
 写：
 
 - Twin 如何转成 prompt；
+- prompt 如何形式化为 `Role Instruction + CST Summary + Writing Constraints + Output Schema`；
 - 如何约束风险措辞；
 - 如何避免混淆当前掌子面和前方预测；
 - 如何生成日报和时段报告。
@@ -221,6 +237,11 @@ Report_t = G(CST_t, Prompt_t)
 - 可选 RAG-LLM
 - CST-LLM
 
+并说明：
+
+- `w/o Spatial Alignment` 应是公平 baseline，即保留 PLC 和地质摘要，但不显式提供空间映射关系；
+- 不应通过“故意删掉信息”来弱化 baseline。
+
 #### 4.3 Evaluation Metrics
 
 写：
@@ -230,6 +251,11 @@ Report_t = G(CST_t, Prompt_t)
 - `RDR`
 - `TS`
 - `EOR`
+
+同时在文中交代实验优先级：
+
+- 第一阶段重点指标：`ICS / FCS / TS`
+- 第二阶段补充指标：`RDR / EOR`
 
 #### 4.4 Implementation Details
 
@@ -259,6 +285,11 @@ Report_t = G(CST_t, Prompt_t)
 展示关键结论与证据映射结果。
 
 #### 5.5 Dynamic State Update Analysis
+
+建议定位为：
+
+- `case study`
+- `state continuity analysis`
 
 证明 `CST_t` 是可递推更新的，而不是孤立快照。
 
@@ -321,6 +352,12 @@ Report_t = G(CST_t, Prompt_t)
 2. 指标定义表
 3. 主实验结果表
 4. 追溯性案例表
+
+结果表默认建议采用：
+
+- `mean ± std`
+
+如 case 数量允许，可在补充实验中加入简单显著性检验。
 
 ## 6. 补充材料建议
 
