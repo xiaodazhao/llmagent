@@ -1,7 +1,7 @@
 import pandas as pd
 
 from analysis.dataprocess import (
-    load_and_process, segments_to_text, compute_stats, stats_to_text
+    annotate_routine_ring_building_stops, load_and_process, segments_to_text, compute_stats, stats_to_text
 )
 from analysis.excavation_state import (
     detect_excavation_state, excavation_state_segments, explain_excavation_states,
@@ -194,6 +194,7 @@ def _run_geology_analysis(df: pd.DataFrame) -> dict:
     try:
         evidence_df = load_evidence_db(EVIDENCE_DB_PATH)
         df_geo = attach_geology_labels(df, evidence_df)
+        df_geo = annotate_routine_ring_building_stops(df_geo)
 
         segment_df = run_segment_analysis(df_geo, segment_length=10)
         coupling_analysis_result = run_coupling_analysis(

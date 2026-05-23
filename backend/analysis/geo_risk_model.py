@@ -7,15 +7,7 @@ import numpy as np
 import pandas as pd
 
 
-GRS_MODEL_VERSION = "engineering_prior_dynamic_v1"
-
-ENGINEERING_GRS_WEIGHTS = {
-    "grade_score": 0.30,
-    "hazard_score": 0.25,
-    "water_score": 0.20,
-    "collapse_score": 0.15,
-    "source_confidence": 0.10,
-}
+GRS_MODEL_VERSION = "equal_weight_minmax_dynamic_v2"
 
 DEFAULT_CORRECTION_LAMBDA = 0.40
 DEFAULT_MIN_GRS = 0.05
@@ -85,11 +77,11 @@ def compute_row_grs_base(
     colmap: dict[str, str | None],
     warnings: list[str] | None = None,
 ) -> tuple[pd.Series, pd.Series, pd.DataFrame]:
-    """Compute row-level engineering-prior GRS components.
+    """Compute row-level equal-weight GRS components.
 
-    The base model is intentionally fixed and explainable:
-    grade + structural hazard + water + collapse + source confidence.
-    Missing inputs are treated as zero and reported through ``warnings``.
+    The base model keeps the same geology evidence dimensions as before,
+    but removes subjective engineering weights. Each component is normalized
+    to a shared 0-1 space and then aggregated with equal weighting.
     """
     if warnings is None:
         warnings = []
@@ -103,7 +95,7 @@ def compute_row_grs_base(
     collapse_score = _collapse_score_series(df, colmap, text, warnings)
     source_confidence = _source_confidence_series(df, colmap, warnings)
 
-    components = pd.DataFrame(
+    raw_components = pd.DataFrame(
         {
             "grade_score": grade_score,
             "hazard_score": hazard_score,
@@ -114,9 +106,15 @@ def compute_row_grs_base(
         index=idx,
     ).replace([np.inf, -np.inf], np.nan).fillna(0).clip(0, 1)
 
-    grs_base = _zero_series(idx)
-    for key, weight in ENGINEERING_GRS_WEIGHTS.items():
-        grs_base = grs_base + float(weight) * components[key]
+    components = pd.DataFrame(
+        {
+            column: _normalize_feature_series(raw_components[column])
+            for column in raw_components.columns
+        },
+        index=idx,
+    ).replace([np.inf, -np.inf], np.nan).fillna(0).clip(0, 1)
+
+    grs_base = components.mean(axis=1).fillna(0).clip(0, 1)
 
     if float(components.abs().sum(axis=1).sum()) <= 1e-12:
         warnings.append("GRS base uses zero-risk fallback because geology component fields are unavailable")
@@ -183,8 +181,16 @@ def apply_dynamic_grs_correction(
 
     metadata = {
         "grs_model_version": GRS_MODEL_VERSION,
-        "grs_weight_method": "engineering_prior_dynamic",
-        "engineering_weights": dict(ENGINEERING_GRS_WEIGHTS),
+        "grs_weight_method": "equal_weight_minmax",
+        "feature_aggregation": "mean(normalized_features)",
+        "equal_weight_features": [
+            "grade_score",
+            "hazard_score",
+            "water_score",
+            "collapse_score",
+            "source_confidence",
+        ],
+        "engineering_weights": {},
         "correction_lambda": lambda_value,
         "min_grs": min_value,
         "correction_formula": "GRS_base * (1 + lambda * (0.5 * RAI + 0.5 * stop_ratio))",
@@ -297,6 +303,16 @@ def _spatial_smooth(series: pd.Series) -> pd.Series:
                 weight_sum += weight
         smoothed.append(weighted_sum / weight_sum if weight_sum else 0.0)
     return pd.Series(smoothed, index=series.index).clip(0, 1)
+
+
+def _normalize_feature_series(series: pd.Series) -> pd.Series:
+    """Normalize one component series into a shared 0-1 feature space."""
+    values = pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan).fillna(0)
+    min_value = float(values.min(skipna=True)) if not values.empty else 0.0
+    max_value = float(values.max(skipna=True)) if not values.empty else 0.0
+    if max_value - min_value > 1e-9:
+        return ((values - min_value) / (max_value - min_value)).clip(0, 1)
+    return values.clip(0, 1)
 
 
 def _grade_score(value: Any) -> float:

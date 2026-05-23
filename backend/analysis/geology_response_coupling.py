@@ -8,13 +8,14 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import IsolationForest
 
 from analysis.geo_risk_model import apply_dynamic_grs_correction, compute_row_grs_base
 from utils.chainage_utils import format_chainage_range_dk
 from utils.serialization import serialize_for_json
 
 
-GEOLOGY_METHOD_VERSION = "GRS_RAI_GRCI_v3_engineering_dynamic"
+GEOLOGY_METHOD_VERSION = "GRS_equal_weight_RAI_iforest_GRCI_validation_v4"
 
 GRADE_SCORES = {
     "I": 0.05,
@@ -97,6 +98,7 @@ METRIC_COLUMNS = [
     "GRS_max",
     "RAI",
     "response_anomaly_index",
+    "iforest_anomaly_score",
     "stop_anomaly",
     "efficiency_anomaly",
     "param_anomaly",
@@ -196,7 +198,13 @@ def run_coupling_analysis(
         colmap,
         warnings,
     )
-    df["row_grs"] = df["row_grs_base"]
+    df["row_grs"] = _apply_gaussian_chainage_smoothing(
+        df=df,
+        value_col="row_grs_base",
+        sigma_m=max(float(segment_length) / 2.0, 1.0),
+        radius_m=max(1.5 * float(segment_length), 3.0),
+    )
+    df = _add_row_response_anomaly_scores(df, warnings)
     segment_metrics = _aggregate_segment_features(df, colmap, warnings)
     segment_metrics = _add_response_anomaly_index(segment_metrics, warnings)
     segment_metrics, grs_metadata = apply_dynamic_grs_correction(segment_metrics)
@@ -294,6 +302,9 @@ def _prepare_raw_dataframe(df: pd.DataFrame, colmap: dict[str, str | None], segm
     chainage_col = colmap["chainage"]
     out["chainage"] = pd.to_numeric(out[chainage_col], errors="coerce")
     out = out.dropna(subset=["chainage"]).copy()
+    time_col = colmap.get("time")
+    if time_col:
+        out["__time"] = pd.to_datetime(out[time_col], errors="coerce")
 
     for key in ["speed", "set_speed", "thrust", "torque", "rpm", "penetration", "state"]:
         col = colmap.get(key)
@@ -312,6 +323,15 @@ def _prepare_raw_dataframe(df: pd.DataFrame, colmap: dict[str, str | None], segm
         if col:
             out[f"__{key}"] = pd.to_numeric(out[col], errors="coerce")
 
+    for source_col, target_col in [
+        ("routine_ring_building_candidate", "__routine_stop_candidate"),
+        ("routine_stop_candidate", "__routine_stop_candidate"),
+        ("routine_ring_building_score", "__routine_stop_score"),
+        ("routine_stop_score", "__routine_stop_score"),
+    ]:
+        if source_col in out.columns:
+            out[target_col] = pd.to_numeric(out[source_col], errors="coerce")
+
     out["segment_start"] = (np.floor(out["chainage"] / segment_length) * segment_length).astype(float)
     out["segment_end"] = out["segment_start"] + segment_length
     out["segment_id"] = out["segment_start"].map(_number_key) + "_" + out["segment_end"].map(_number_key)
@@ -325,6 +345,47 @@ def _compute_row_geology_scores(
 ) -> tuple[pd.Series, pd.Series, pd.DataFrame]:
     """Delegate GRS_base calculation to the engineering-prior geology model."""
     return compute_row_grs_base(df, colmap, warnings)
+
+
+def _apply_gaussian_chainage_smoothing(
+    df: pd.DataFrame,
+    value_col: str,
+    sigma_m: float,
+    radius_m: float,
+) -> pd.Series:
+    """Smooth one row-level score along chainage with Gaussian decay."""
+    if value_col not in df.columns or "chainage" not in df.columns or df.empty:
+        return _zero_series(df.index)
+
+    sigma = max(float(sigma_m), 1e-6)
+    radius = max(float(radius_m), sigma)
+    work = pd.DataFrame(
+        {
+            "chainage": pd.to_numeric(df["chainage"], errors="coerce"),
+            "value": pd.to_numeric(df[value_col], errors="coerce").fillna(0).clip(0, 1),
+        },
+        index=df.index,
+    ).dropna(subset=["chainage"]).sort_values("chainage")
+    if work.empty:
+        return _zero_series(df.index)
+
+    chainage_values = work["chainage"].to_numpy(dtype=float)
+    score_values = work["value"].to_numpy(dtype=float)
+    smoothed = np.zeros(len(work), dtype=float)
+
+    for pos, center in enumerate(chainage_values):
+        left = np.searchsorted(chainage_values, center - radius, side="left")
+        right = np.searchsorted(chainage_values, center + radius, side="right")
+        local_chainage = chainage_values[left:right]
+        local_scores = score_values[left:right]
+        distances = local_chainage - center
+        weights = np.exp(-0.5 * (distances / sigma) ** 2)
+        weight_sum = float(weights.sum())
+        smoothed[pos] = float(np.dot(weights, local_scores) / weight_sum) if weight_sum > 1e-12 else float(score_values[pos])
+
+    out = pd.Series(0.0, index=df.index)
+    out.loc[work.index] = smoothed
+    return out.clip(0, 1)
 
 
 
@@ -343,12 +404,12 @@ def _aggregate_segment_features(
         chainage_count=("chainage", "count"),
         segment_start_first=("segment_start", "first"),
         segment_end_first=("segment_end", "first"),
-        GRS_mean=("row_grs_base", "mean"),
-        GRS_max=("row_grs_base", "max"),
+        GRS_mean=("row_grs", "mean"),
+        GRS_max=("row_grs", "max"),
         source_evidence_norm=("source_evidence_norm", "max"),
     ).reset_index()
 
-    out["GRS_base"] = (0.35 * out["GRS_mean"] + 0.65 * out["GRS_max"]).clip(0, 1)
+    out["GRS_base"] = (0.50 * out["GRS_mean"] + 0.50 * out["GRS_max"]).clip(0, 1)
     out["GRS"] = out["GRS_base"]
     out["geo_risk_score"] = out["GRS"]
     out["geo_risk_norm"] = out["GRS"]
@@ -414,123 +475,180 @@ def _aggregate_segment_features(
     if "torque_mean" not in out.columns:
         warnings.append("torque column not found; torque anomaly validation is limited")
 
+    row_metric_columns = [
+        "row_iforest_anomaly_score",
+        "row_rai",
+        "row_routine_stop_relief",
+        "row_stop_anomaly",
+        "row_efficiency_anomaly",
+        "row_speed_drop_score",
+        "row_thrust_anomaly_score",
+        "row_torque_anomaly_score",
+        "row_rpm_anomaly_score",
+        "row_penetration_anomaly_score",
+        "row_efficiency_anomaly_score",
+        "row_response_consistency",
+        "row_load_response_norm",
+        "row_speed_decay_norm",
+    ]
+    for column in row_metric_columns:
+        if column not in df.columns:
+            continue
+        stats = grouped[column].agg(["mean", "max"]).reset_index()
+        stats = stats.rename(columns={"mean": f"{column}_mean", "max": f"{column}_max"})
+        out = out.merge(stats, on="segment_id", how="left")
+
+    return out
+
+
+def _add_row_response_anomaly_scores(df: pd.DataFrame, warnings: list[str]) -> pd.DataFrame:
+    """Build row-level response anomaly features before segment aggregation."""
+    out = df.copy()
+    idx = out.index
+
+    feature_cols = [col for col in ["__thrust", "__torque", "__speed", "__rpm", "__penetration"] if col in out.columns]
+    valid = out[feature_cols].apply(pd.to_numeric, errors="coerce") if feature_cols else pd.DataFrame(index=idx)
+    if len(feature_cols) >= 2 and not valid.empty and valid.dropna(how="all").shape[0] >= 3:
+        filled = valid.copy()
+        for column in feature_cols:
+            median = filled[column].median(skipna=True)
+            filled[column] = filled[column].fillna(median if pd.notna(median) else 0.0)
+        model = IsolationForest(
+            n_estimators=200,
+            contamination="auto",
+            random_state=42,
+        )
+        model.fit(filled)
+        raw_score = pd.Series(-model.score_samples(filled), index=filled.index)
+        out["row_iforest_anomaly_score"] = _normalize_series(raw_score)
+    else:
+        warnings.append("IsolationForest requires at least 3 samples and 2 response features; row anomaly score set to zero")
+        out["row_iforest_anomaly_score"] = _zero_series(idx)
+
+    out["row_speed_drop_score"] = (
+        _robust_score(out["__speed"], side="low")
+        if "__speed" in out.columns
+        else _zero_series(idx)
+    )
+    out["row_thrust_anomaly_score"] = (
+        _robust_score(out["__thrust"], side="high")
+        if "__thrust" in out.columns
+        else _zero_series(idx)
+    )
+    out["row_torque_anomaly_score"] = (
+        _robust_score(out["__torque"], side="high")
+        if "__torque" in out.columns
+        else _zero_series(idx)
+    )
+    out["row_rpm_anomaly_score"] = (
+        _robust_score(out["__rpm"], side="two")
+        if "__rpm" in out.columns
+        else _zero_series(idx)
+    )
+    out["row_penetration_anomaly_score"] = (
+        _robust_score(out["__penetration"], side="two")
+        if "__penetration" in out.columns
+        else _zero_series(idx)
+    )
+
+    if "__speed" in out.columns and "__set_speed" in out.columns:
+        set_speed = pd.to_numeric(out["__set_speed"], errors="coerce").replace(0, np.nan)
+        efficiency = (pd.to_numeric(out["__speed"], errors="coerce") / set_speed).replace([np.inf, -np.inf], np.nan)
+        out["row_efficiency_anomaly_score"] = _robust_score(efficiency.fillna(0), side="low")
+    else:
+        out["row_efficiency_anomaly_score"] = out["row_speed_drop_score"].copy()
+
+    if "__speed" in out.columns:
+        speed_reference = _safe_positive_median(out["__speed"])
+        low_threshold = speed_reference * 0.10 if speed_reference > 0 else 1e-6
+        row_speed_stop = (
+            pd.to_numeric(out["__speed"], errors="coerce").fillna(0).abs() <= low_threshold
+        ).astype(float)
+    else:
+        row_speed_stop = _zero_series(idx)
+
+    if "__state" in out.columns:
+        row_state_stop = (
+            pd.to_numeric(out["__state"], errors="coerce").fillna(-1) == 0
+        ).astype(float)
+    else:
+        row_state_stop = _zero_series(idx)
+
+    out["row_stop_anomaly_raw"] = pd.concat([row_speed_stop, row_state_stop], axis=1).max(axis=1).fillna(0).clip(0, 1)
+    if "__routine_stop_score" in out.columns:
+        routine_relief = pd.to_numeric(out["__routine_stop_score"], errors="coerce").fillna(0).clip(0, 1)
+    elif "__routine_stop_candidate" in out.columns:
+        routine_relief = pd.to_numeric(out["__routine_stop_candidate"], errors="coerce").fillna(0).clip(0, 1)
+    else:
+        routine_relief = _zero_series(idx)
+    out["row_routine_stop_relief"] = routine_relief
+    out["row_stop_anomaly"] = (out["row_stop_anomaly_raw"] * (1.0 - 0.80 * routine_relief)).clip(0, 1)
+    out["row_efficiency_anomaly"] = out["row_efficiency_anomaly_score"].fillna(0).clip(0, 1)
+    out["row_load_response_norm"] = pd.concat(
+        [out["row_thrust_anomaly_score"], out["row_torque_anomaly_score"]],
+        axis=1,
+    ).max(axis=1).fillna(0).clip(0, 1)
+    out["row_speed_decay_norm"] = out["row_speed_drop_score"].fillna(0).clip(0, 1)
+
+    component_matrix = pd.DataFrame(
+        {
+            "speed": out["row_speed_drop_score"],
+            "thrust": out["row_thrust_anomaly_score"],
+            "torque": out["row_torque_anomaly_score"],
+            "rpm": out["row_rpm_anomaly_score"],
+            "penetration": out["row_penetration_anomaly_score"],
+        },
+        index=idx,
+    ).fillna(0).clip(0, 1)
+    out["row_response_consistency"] = (component_matrix >= 0.55).sum(axis=1) / max(len(component_matrix.columns), 1)
+    out["row_rai"] = (
+        0.70 * out["row_iforest_anomaly_score"]
+        + 0.15 * out["row_stop_anomaly"]
+        + 0.15 * out["row_efficiency_anomaly"]
+    ).clip(0, 1)
     return out
 
 
 def _add_response_anomaly_index(segment_df: pd.DataFrame, warnings: list[str]) -> pd.DataFrame:
-    """Internal helper for add response anomaly index."""
+    """Aggregate row-level anomaly scores into a segment-level RAI."""
     out = segment_df.copy()
     idx = out.index
-    score_cols: list[str] = []
-    group_scores: dict[str, pd.Series] = {}
 
-    def add_score(name: str, series: pd.Series, side: str, group: str) -> None:
-        """Handle add score."""
-        score = _robust_score(series, side=side)
-        out[name] = score
-        score_cols.append(name)
-        if group in group_scores:
-            group_scores[group] = pd.concat([group_scores[group], score], axis=1).max(axis=1)
-        else:
-            group_scores[group] = score
+    iforest_mean = _mean_max_blend(out, "row_iforest_anomaly_score")
+    if float(iforest_mean.max(skipna=True) or 0) <= 1e-12:
+        warnings.append("segment RAI uses zero fallback because row-level IsolationForest scores are unavailable")
 
-    if "speed_mean" in out.columns:
-        add_score("speed_drop_score", out["speed_mean"], "low", "speed")
-    else:
-        out["speed_drop_score"] = _zero_series(idx)
+    out["iforest_anomaly_score"] = iforest_mean
+    out["stop_anomaly"] = _mean_max_blend(out, "row_stop_anomaly")
+    out["efficiency_anomaly"] = _mean_max_blend(out, "row_efficiency_anomaly")
+    out["speed_drop_score"] = _mean_max_blend(out, "row_speed_drop_score")
+    out["thrust_anomaly_score"] = _mean_max_blend(out, "row_thrust_anomaly_score")
+    out["torque_anomaly_score"] = _mean_max_blend(out, "row_torque_anomaly_score")
+    out["rpm_anomaly_score"] = _mean_max_blend(out, "row_rpm_anomaly_score")
+    out["penetration_anomaly_score"] = _mean_max_blend(out, "row_penetration_anomaly_score")
+    out["efficiency_anomaly_score"] = _mean_max_blend(out, "row_efficiency_anomaly_score")
+    out["response_consistency"] = _mean_max_blend(out, "row_response_consistency")
+    out["load_response_norm"] = _mean_max_blend(out, "row_load_response_norm")
+    out["speed_decay_norm"] = _mean_max_blend(out, "row_speed_decay_norm")
+    out["speed_volatility_score"] = (
+        _robust_score(out["speed_cv"], side="high")
+        if "speed_cv" in out.columns
+        else _zero_series(idx)
+    )
 
-    if "speed_cv" in out.columns:
-        add_score("speed_volatility_score", out["speed_cv"], "high", "speed")
-    elif "speed_std" in out.columns:
-        add_score("speed_volatility_score", out["speed_std"], "high", "speed")
-    else:
-        out["speed_volatility_score"] = _zero_series(idx)
-
-    load_parts = []
-    if "thrust_mean" in out.columns:
-        thrust_score = _robust_score(out["thrust_mean"], side="high")
-        load_parts.append(thrust_score)
-    if "thrust_cv" in out.columns:
-        load_parts.append(_robust_score(out["thrust_cv"], side="high"))
-    out["thrust_anomaly_score"] = _combine_scores(load_parts, idx)
-    if load_parts:
-        score_cols.append("thrust_anomaly_score")
-        group_scores["thrust"] = out["thrust_anomaly_score"]
-
-    torque_parts = []
-    if "torque_mean" in out.columns:
-        torque_parts.append(_robust_score(out["torque_mean"], side="high"))
-    if "torque_cv" in out.columns:
-        torque_parts.append(_robust_score(out["torque_cv"], side="high"))
-    out["torque_anomaly_score"] = _combine_scores(torque_parts, idx)
-    if torque_parts:
-        score_cols.append("torque_anomaly_score")
-        group_scores["torque"] = out["torque_anomaly_score"]
-
-    rpm_parts = []
-    if "rpm_mean" in out.columns:
-        rpm_parts.append(_robust_score(out["rpm_mean"], side="two"))
-    if "rpm_cv" in out.columns:
-        rpm_parts.append(_robust_score(out["rpm_cv"], side="high"))
-    out["rpm_anomaly_score"] = _combine_scores(rpm_parts, idx)
-    if rpm_parts:
-        score_cols.append("rpm_anomaly_score")
-        group_scores["rpm"] = out["rpm_anomaly_score"]
-
-    penetration_parts = []
-    if "penetration_mean" in out.columns:
-        penetration_parts.append(_robust_score(out["penetration_mean"], side="two"))
-    if "penetration_cv" in out.columns:
-        penetration_parts.append(_robust_score(out["penetration_cv"], side="high"))
-    out["penetration_anomaly_score"] = _combine_scores(penetration_parts, idx)
-    if penetration_parts:
-        score_cols.append("penetration_anomaly_score")
-        group_scores["penetration"] = out["penetration_anomaly_score"]
-
-    if "efficiency" in out.columns:
-        out["efficiency_anomaly_score"] = _robust_score(out["efficiency"], side="low")
-        score_cols.append("efficiency_anomaly_score")
-        group_scores["efficiency"] = out["efficiency_anomaly_score"]
-    else:
-        out["efficiency_anomaly_score"] = _zero_series(idx)
-
-    if score_cols:
-        score_matrix = out[score_cols].fillna(0).clip(0, 1)
-        top_mean = score_matrix.apply(
-            lambda row: float(np.mean(sorted(row.tolist(), reverse=True)[: min(3, len(row))])),
-            axis=1,
-        )
-        mean_all = score_matrix.mean(axis=1)
-    else:
-        warnings.append("no PLC parameter anomaly fields available; param_anomaly is set to zero")
-        top_mean = _zero_series(idx)
-        mean_all = _zero_series(idx)
-
-    if group_scores:
-        group_matrix = pd.concat(group_scores, axis=1).fillna(0).clip(0, 1)
-        out["response_consistency"] = (group_matrix >= 0.55).sum(axis=1) / max(len(group_matrix.columns), 1)
-    else:
-        out["response_consistency"] = 0.0
-
-    out["stop_anomaly"] = _compute_stop_anomaly(out, warnings)
-    out["efficiency_anomaly"] = _compute_efficiency_anomaly(out, warnings)
     out["param_anomaly"] = (
-        0.60 * top_mean
-        + 0.25 * mean_all
-        + 0.15 * pd.to_numeric(out["response_consistency"], errors="coerce").fillna(0)
+        0.55 * out["iforest_anomaly_score"]
+        + 0.20 * out["load_response_norm"]
+        + 0.15 * out["speed_decay_norm"]
+        + 0.10 * out["response_consistency"]
     ).clip(0, 1)
 
     out["RAI"] = (
-        0.50 * out["stop_anomaly"]
-        + 0.30 * out["efficiency_anomaly"]
-        + 0.20 * out["param_anomaly"]
+        0.70 * out["iforest_anomaly_score"]
+        + 0.15 * out["stop_anomaly"]
+        + 0.15 * out["efficiency_anomaly"]
     ).clip(0, 1)
     out["response_anomaly_index"] = out["RAI"]
-    out["load_response_norm"] = pd.concat(
-        [out["thrust_anomaly_score"], out["torque_anomaly_score"]],
-        axis=1,
-    ).max(axis=1).fillna(0)
-    out["speed_decay_norm"] = out["speed_drop_score"].fillna(0)
     out = _add_anomaly_pattern(out)
     return out
 
@@ -655,6 +773,33 @@ def _ratio_series(series: pd.Series) -> pd.Series:
     max_value = values.max(skipna=True)
     if pd.notna(max_value) and max_value > 1.0 and max_value <= 100.0:
         values = values / 100.0
+    return values.clip(0, 1)
+
+
+def _mean_max_blend(df: pd.DataFrame, prefix: str) -> pd.Series:
+    """Blend mean and max aggregates for one row-derived segment feature."""
+    idx = df.index
+    parts = []
+    mean_col = f"{prefix}_mean"
+    max_col = f"{prefix}_max"
+    if mean_col in df.columns:
+        parts.append(pd.to_numeric(df[mean_col], errors="coerce").fillna(0).clip(0, 1))
+    if max_col in df.columns:
+        parts.append(pd.to_numeric(df[max_col], errors="coerce").fillna(0).clip(0, 1))
+    if not parts:
+        return _zero_series(idx)
+    if len(parts) == 1:
+        return parts[0]
+    return (0.50 * parts[0] + 0.50 * parts[1]).clip(0, 1)
+
+
+def _normalize_series(series: pd.Series) -> pd.Series:
+    """Normalize a numeric series into the 0-1 interval."""
+    values = pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan).fillna(0)
+    min_value = float(values.min(skipna=True)) if not values.empty else 0.0
+    max_value = float(values.max(skipna=True)) if not values.empty else 0.0
+    if max_value - min_value > 1e-9:
+        return ((values - min_value) / (max_value - min_value)).clip(0, 1)
     return values.clip(0, 1)
 
 

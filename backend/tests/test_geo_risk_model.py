@@ -47,8 +47,10 @@ def test_compute_row_grs_base_combines_grade_hazard_and_source_confidence():
     ]
     assert grs_base.iloc[0] > grs_base.iloc[1]
     assert 0 <= source_confidence.iloc[0] <= 1
-    assert round(float(grs_base.iloc[0]), 3) >= 0.61
-    assert round(float(grs_base.iloc[1]), 3) == 0.085
+    assert grs_base.between(0, 1).all()
+    assert ((components >= 0) & (components <= 1)).all().all()
+    assert round(float(grs_base.iloc[0]), 3) == 1.0
+    assert round(float(grs_base.iloc[1]), 3) == 0.0
 
 
 def test_apply_dynamic_grs_correction_raises_high_response_segments():
@@ -64,6 +66,7 @@ def test_apply_dynamic_grs_correction_raises_high_response_segments():
     corrected_df, metadata = apply_dynamic_grs_correction(segment_df)
 
     assert metadata["correction_mode"] == "rai_stop_ratio"
+    assert metadata["grs_weight_method"] == "equal_weight_minmax"
     assert corrected_df.loc[0, "correction"] > corrected_df.loc[1, "correction"]
     assert corrected_df.loc[0, "GRS_corrected"] > corrected_df.loc[0, "GRS_base"]
     assert corrected_df.loc[1, "GRS"] >= 0.05

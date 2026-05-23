@@ -1,94 +1,91 @@
-# 后端脚本清单
+# 后端清单
 
-这份清单描述当前 `backend/` 的真实状态，重点回答三个问题：
+本文档描述当前 `backend/` 的真实主链，重点说明：
 
-- 哪些脚本属于运行主链
-- 哪些脚本是手动使用的 CLI 工具
-- 哪些历史重复实现已经被收口
+- 哪些模块属于运行主链
+- 哪些脚本是保留的 CLI 工具
+- 当前算法升级分别落在哪些文件
 
-## 1. 当前运行主链
+## 1. 运行主链
 
-### Web 入口与 API
+### Web 与 API
 
 - `backend/app.py`
-  作用：创建 FastAPI 应用并注册 TBM 路由。
+  - 创建 FastAPI 应用
 - `backend/routes/tbm.py`
-  作用：统一提供 `/dates`、`/summary`、`/state`、`/gas`、`/geology`、`/report`、`/report_by_time`、`/agent_v2` 等接口。
+  - 提供 `/dates`、`/summary`、`/state`、`/gas`、`/geology`、`/report`、`/report_by_time`、`/agent_v2` 等接口
 
 ### 主分析编排
 
 - `backend/services/tbm_analysis_service.py`
-  作用：主分析编排服务，负责施工分析、地质融合、区段耦合、数字孪生状态和 LLM 摘要准备。
-- `backend/services/analysis_cache_service.py`
-  作用：按 CSV 文件做分析缓存。
-- `backend/services/sqlite_storage_service.py`
-  作用：统一负责 SQLite 持久化，包括证据库、历史记录、Agent 会话和缓存。
+  - 主分析编排服务
+  - 负责工况分析、地质融合、耦合分析、数字孪生状态和 LLM 摘要
 
-### 施工分析
+### 基础施工分析
 
 - `backend/analysis/dataprocess.py`
-  作用：基础工况切分与工况统计。
+  - 基础工况切分
+  - 停机统计
+  - 常规环级停顿候选识别
 - `backend/analysis/excavation_state.py`
-  作用：施工状态识别、状态片段汇总和效率统计。
+  - 施工状态识别与效率统计
 - `backend/analysis/gas_analysis.py`
-  作用：气体监测统计和超限分析。
+  - 气体监测分析
 
 ### 地质融合与区段分析
 
 - `backend/geology/geology_fusion_backend.py`
-  作用：加载证据库并挂接到 TBM DataFrame。
+  - 证据库加载与 TBM 数据挂接
 - `backend/geology/fusion.py`
-  作用：逐里程命中证据并做事实层融合。
+  - 逐点地质证据融合
 - `backend/geology/segment_analysis.py`
-  作用：把逐点数据聚合为固定区段特征。
+  - 固定区段聚合
 - `backend/geology/geology_summary.py`
-  作用：输出记录级、区段级和掌子面摘要。
+  - 地质摘要与掌子面摘要
 
-### 区段关注、耦合与前方提示
+### 区段关注与耦合分析
 
 - `backend/analysis/geo_risk_model.py`
-  作用：地质关注度相关计算。
+  - `GRS` 分量构造与动态修正
 - `backend/analysis/geology_response_coupling.py`
-  作用：当前唯一保留的耦合分析主版本，负责 `GRS / RAI / GRCI`、区段分类、高关注区段和耦合摘要。
+  - `GRS / RAI / GRCI` 主版本
+  - 高斯平滑
+  - Isolation Forest 异常检测
+  - 停顿折减后的耦合分析
 - `backend/analysis/forward_risk_advisor.py`
-  作用：生成前视区段关注提示。
+  - 前方区段提示
 
 ### 证据解析与导入
 
 - `backend/parsers/tsp_parser.py`
-  作用：解析 TSP PDF。
 - `backend/parsers/hsp_parser.py`
-  作用：解析 HSP PDF。
 - `backend/parsers/sketch_parser.py`
-  作用：解析掌子面/洞身素描 PDF。
 - `backend/services/evidence_import_service.py`
-  作用：统一负责证据 PDF 的增量导入、清洗、去重和写库。
 
-### 数字孪生、历史、LLM
+### 数字孪生、历史、缓存、存储
 
 - `backend/services/digital_twin_state.py`
-  作用：构建轻量化数字孪生状态快照。
 - `backend/services/history_memory_service.py`
-  作用：生成历史记录和历史对比摘要。
-- `backend/llm/prompt_builder.py`
-  作用：生成日报 Prompt。
-- `backend/llm/prompt_builder_timewindow.py`
-  作用：生成时段报告 Prompt。
-- `backend/llm/llm_api.py`
-  作用：调用 DeepSeek / Gemini 输出报告文本。
+- `backend/services/analysis_cache_service.py`
+- `backend/services/sqlite_storage_service.py`
 
-### Agent 问答链
+### LLM
+
+- `backend/llm/prompt_builder.py`
+  - 日报提示词
+- `backend/llm/prompt_builder_timewindow.py`
+  - 时段报告提示词
+- `backend/llm/llm_api.py`
+  - 模型调用层
+
+### Agent
 
 - `backend/agent/supervisor_agent.py`
-  作用：当前唯一在用的会话式 Supervisor Agent。
 - `backend/agent/tbm_tools.py`
-  作用：把主分析能力封装为 Agent 工具层。
 - `backend/agent/common.py`
-  作用：统一工具输出结构。
 - `backend/agent/registry.py`
-  作用：描述 Agent 能力和工具映射。
 
-### 主链依赖的配置、Schema 和工具
+### 依赖工具与 Schema
 
 - `backend/config.py`
 - `backend/schemas/api.py`
@@ -100,109 +97,73 @@
 - `backend/utils/serialization.py`
 - `backend/utils/time_window_utils.py`
 
-这些文件都属于当前系统真实依赖的一部分。
+## 2. 保留的 CLI 工具
 
-## 2. CLI 工具
-
-这些脚本不会被页面或 API 自动调用，但仍然保留为明确的手动工具。
+这些脚本不属于自动运行主链，但仍然保留为手动工具：
 
 - `backend/scripts/build_evidence_db.py`
-  作用：全量扫描 `TSP_DIR / HSP_DIR / SKETCH_DIR` 并重建证据库。
+  - 全量重建证据库
 - `backend/scripts/import_evidence_reports.py`
-  作用：增量导入指定 PDF 或目录。
+  - 增量导入证据 PDF
 - `backend/scripts/inspect_coupling_analysis.py`
-  作用：查看指定日期的耦合分析结果。
+  - 查看指定日期的耦合分析输出
 - `backend/scripts/test_agent_v2.py`
-  作用：对 `agent_v2` 做接口级冒烟检查。
+  - Agent 冒烟测试
 
-## 3. 测试脚本
+## 3. 当前算法升级落点
 
-`backend/tests/` 下所有文件都属于测试层，不进运行主链，但都仍然有效：
+### 3.1 GRS 平权表征
 
-- `conftest.py`
-- `test_evidence_import_service.py`
-- `test_geo_risk_model.py`
-- `test_geology_response_coupling.py`
-- `test_history_memory_service.py`
-- `test_parsers.py`
-- `test_sqlite_storage_service.py`
-- `test_tbm_routes.py`
+- `backend/analysis/geo_risk_model.py`
+  - 负责分量归一化与平权聚合
 
-## 4. 已经完成的收口
-
-### 4.1 耦合分析统一为单一版本
-
-此前后端同时存在：
+### 3.2 高斯衰减平滑
 
 - `backend/analysis/geology_response_coupling.py`
-- `backend/analysis/coupling_analysis.py`
+  - 在逐点 `GRS_base` 之后做按里程的高斯平滑
+  - 再用平滑后的 `row_grs` 聚合区段 `GRS`
 
-现在已经统一为单一版本：
+### 3.3 RAI Isolation Forest
 
-- 保留 `backend/analysis/geology_response_coupling.py`
-- 删除 `backend/analysis/coupling_analysis.py`
-- `backend/services/tbm_analysis_service.py` 不再维护旧版 fallback 分支
+- `backend/analysis/geology_response_coupling.py`
+  - 逐点异常分数
+  - 区段级 `RAI` 聚合
 
-### 4.2 里程工具统一为单一模块
+### 3.4 常规环级停顿候选折减
 
-此前里程相关函数分散在：
+- `backend/analysis/dataprocess.py`
+  - `annotate_routine_ring_building_stops(...)`
+- `backend/services/tbm_analysis_service.py`
+  - 在地质融合后调用该标记逻辑
+- `backend/analysis/geology_response_coupling.py`
+  - 对 `row_stop_anomaly` 做折减
 
-- `backend/utils/utils.py`
-- `backend/utils/chainage_utils.py`
+### 3.5 GRCI 耦合验证
 
-现在已经统一为：
+- `backend/analysis/geology_response_coupling.py`
+  - 同步、滞后、变化和一致性耦合
 
-- 保留 `backend/utils/chainage_utils.py`
+## 4. 测试覆盖
 
-并将以下能力集中到该模块：
+当前与主链直接相关的测试包括：
 
-- `mileage_to_num`
-- `num_to_mileage`
-- `format_chainage_dk`
-- `format_chainage_range_dk`
-- `safe_float`
-- `compact_text`
+- `backend/tests/test_geo_risk_model.py`
+- `backend/tests/test_geology_response_coupling.py`
+- `backend/tests/test_dataprocess.py`
+- `backend/tests/test_history_memory_service.py`
+- `backend/tests/test_sqlite_storage_service.py`
+- `backend/tests/test_evidence_import_service.py`
+- `backend/tests/test_parsers.py`
+- `backend/tests/test_tbm_routes.py`
 
-原来的 `backend/utils/utils.py` 已删除。
+## 5. 当前结论
 
-### 4.3 证据建库与导入共用一套清洗逻辑
+当前 `backend/` 已经收口为：
 
-此前全量建库和增量导入各自维护一套清洗/转表逻辑。
+- 一套主分析实现
+- 一套主提示词实现
+- 一套主耦合分析实现
+- 一套主里程工具实现
+- 有明确边界的 CLI 工具与测试层
 
-现在已经统一为：
-
-- `backend/services/evidence_import_service.py`
-  - `records_to_dataframe`
-  - `clean_evidence_dataframe`
-
-因此：
-
-- `backend/scripts/build_evidence_db.py` 已复用 service 层实现
-- `backend/scripts/db.py` 已删除
-
-## 5. 已移除的遗留脚本
-
-以下边缘或历史实验脚本已经从仓库中清理：
-
-- `backend/check_and_install.py`
-- `backend/debug_runner.py`
-- `backend/train_risk_probability_model_b.py`
-- `backend/parsers/drill_parser.py`
-- `backend/脚本提取.py`
-
-这样做的目的，是让当前仓库只保留：
-
-- 正在运行的主链代码
-- 仍然有明确用途的 CLI 工具
-- 测试代码
-
-## 6. 当前结论
-
-当前后端已经收口成更干净的结构：
-
-- 耦合分析只有一套主实现
-- 里程工具只有一个主模块
-- 证据建库和增量导入共享一套清洗逻辑
-- 明显的遗留脚本已经移除
-
-现在的 `backend/` 更接近“可交付版本”，而不是“主链 + 历史实验 + 个人调试脚本混放”的状态。
+也就是说，当前后端更接近“稳定主链 + 辅助工具 + 测试”的可维护结构，而不是多版本并存的历史堆叠状态。
