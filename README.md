@@ -14,6 +14,16 @@
 
 如果你希望快速理解项目主线，建议先阅读 [项目总说明](docs/research_overview.md)。
 
+## 论文实验目录
+
+仓库根目录新增了 [experiments](experiments/README.md) 目录，用于承载论文实验脚本、配置和输出目录骨架。它和业务主链分开维护，便于后续做：
+
+- case 冻结
+- `CST` 状态导出
+- `Template / Direct-LLM / CST-LLM` 报告生成
+- 人工评分表与指标汇总
+- 消融计划与追溯表
+
 ## 当前主线
 
 1. 读取 TBM 日运行 `CSV`
