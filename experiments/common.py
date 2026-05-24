@@ -56,6 +56,7 @@ CASE_COLUMNS = [
 ]
 
 DEFAULT_METHODS = ["template", "direct_llm", "cst_llm"]
+FORWARD_LEVEL_SCORE = {"none": 0, "low": 1, "medium": 2, "high": 3}
 
 
 @dataclass
@@ -423,6 +424,135 @@ def evaluation_sheet_rows(cases: list[dict[str, Any]], methods: list[str]) -> li
     return rows
 
 
+def summarize_case_metrics(case: dict[str, Any], context: CaseContext, state: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Build compact metrics for case selection and experiment bookkeeping."""
+    result = context.result
+    state = state or build_cst_state(case, context)
+    coupling = result.get("coupling_summary") or {}
+    forward = result.get("forward_risk_summary") or {}
+    geo = result.get("geo_summary_segment") or {}
+    twin = result.get("digital_twin_state") or {}
+    safety_state = twin.get("safety_state", {}) if isinstance(twin, dict) else {}
+    top_segment = (coupling.get("high_attention_segments") or [{}])[0]
+    return {
+        "case_id": case["case_id"],
+        "date": case["date"],
+        "sample_count": state["temporal_state"]["sample_count"],
+        "analysis_mode": state["temporal_state"]["analysis_mode"],
+        "work_min": state["operation_state"].get("working_duration_min", 0.0),
+        "stop_min": state["operation_state"].get("stoppage_duration_min", 0.0),
+        "GRS_top": top_segment.get("GRS", coupling.get("GRS_max", 0.0)),
+        "RAI_top": top_segment.get("RAI", coupling.get("RAI_max", 0.0)),
+        "GRCI_top": top_segment.get("GRCI", coupling.get("GRCI_max", 0.0)),
+        "high_attention_segment_count": len(result.get("high_attention_segments", [])),
+        "high_risk_segment_count": geo.get("high_risk_segment_count", 0),
+        "multi_source_segment_count": geo.get("multi_source_segment_count", 0),
+        "forward_advice_level": forward.get("advice_level", "none"),
+        "forward_high_risk_count": forward.get("high_risk_count", 0),
+        "gas_exceed_type_count": safety_state.get("gas_exceed_type_count", 0),
+        "gas_exceed_types": ",".join(safety_state.get("gas_exceed_types", [])),
+        "top_segment": top_segment.get("segment", ""),
+        "top_segment_class": top_segment.get("grci_class_label", ""),
+    }
+
+
+def classify_case_type(metrics: dict[str, Any]) -> tuple[str, str, float]:
+    """Assign a candidate case type using simple heuristic rules."""
+    grs = float(metrics.get("GRS_top") or 0.0)
+    rai = float(metrics.get("RAI_top") or 0.0)
+    grci = float(metrics.get("GRCI_top") or 0.0)
+    gas_count = int(metrics.get("gas_exceed_type_count") or 0)
+    high_risk_count = int(metrics.get("high_risk_segment_count") or 0)
+    forward_level = str(metrics.get("forward_advice_level") or "none").lower()
+    forward_score = FORWARD_LEVEL_SCORE.get(forward_level, 0)
+
+    if gas_count > 0:
+        return (
+            "gas_attention",
+            f"gas exceed types={metrics.get('gas_exceed_types') or gas_count}",
+            max(gas_count, 1),
+        )
+    if grs >= 0.55 and rai >= 0.55 and grci >= 0.55:
+        return (
+            "coupled_attention",
+            f"GRS={grs:.2f}, RAI={rai:.2f}, GRCI={grci:.2f}",
+            grci,
+        )
+    if rai >= 0.60 and grci < 0.55:
+        return (
+            "response_anomaly",
+            f"RAI={rai:.2f}, GRCI={grci:.2f}",
+            rai,
+        )
+    if grs >= 0.60 or high_risk_count > 0 or forward_score >= 2:
+        return (
+            "geology_attention",
+            f"GRS={grs:.2f}, high_risk_segments={high_risk_count}, forward={forward_level}",
+            max(grs, forward_score / 3.0),
+        )
+    if grs < 0.35 and rai < 0.35 and grci < 0.35 and gas_count == 0:
+        stability = 1.0 - max(grs, rai, grci)
+        return (
+            "normal",
+            f"GRS={grs:.2f}, RAI={rai:.2f}, GRCI={grci:.2f}",
+            stability,
+        )
+
+    # Fallback: choose the strongest signal.
+    if grci >= max(grs, rai):
+        return ("coupled_attention", f"fallback by GRCI={grci:.2f}", grci)
+    if rai >= grs:
+        return ("response_anomaly", f"fallback by RAI={rai:.2f}", rai)
+    return ("geology_attention", f"fallback by GRS={grs:.2f}", grs)
+
+
+def pick_balanced_cases(candidate_rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """Pick a balanced subset of candidates across target case types."""
+    target_order = [
+        "normal",
+        "geology_attention",
+        "response_anomaly",
+        "coupled_attention",
+        "gas_attention",
+    ]
+    grouped: dict[str, list[dict[str, Any]]] = {key: [] for key in target_order}
+    for row in candidate_rows:
+        grouped.setdefault(str(row.get("case_type")), []).append(row)
+    for values in grouped.values():
+        values.sort(key=lambda item: float(item.get("selection_score") or 0), reverse=True)
+
+    selected: list[dict[str, Any]] = []
+    seen_dates: set[str] = set()
+
+    # First pass: at most one per type.
+    for case_type in target_order:
+        for row in grouped.get(case_type, []):
+            if row["date"] in seen_dates:
+                continue
+            selected.append(row)
+            seen_dates.add(row["date"])
+            break
+
+    # Second pass: fill remaining slots by score.
+    remaining = []
+    for rows in grouped.values():
+        for row in rows:
+            if row["date"] in seen_dates:
+                continue
+            remaining.append(row)
+    remaining.sort(key=lambda item: float(item.get("selection_score") or 0), reverse=True)
+    for row in remaining:
+        if len(selected) >= limit:
+            break
+        selected.append(row)
+        seen_dates.add(row["date"])
+
+    selected = sorted(selected[:limit], key=lambda item: item["date"])
+    for index, row in enumerate(selected, start=1):
+        row["case_id"] = f"C{index:02d}"
+    return selected
+
+
 def safe_float(value: Any) -> float | None:
     """Convert a cell value to float when possible."""
     if value in ("", None):
@@ -485,4 +615,3 @@ def extract_claim_candidates(report_text: str) -> list[str]:
         if len(cleaned) >= 8:
             claims.append(cleaned)
     return claims
-

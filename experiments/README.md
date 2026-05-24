@@ -5,7 +5,7 @@
 建议的使用顺序：
 
 1. `00_prepare_cases.py`
-   生成或整理实验 `case_list.csv`
+   生成或整理实验 `case_list.csv`，并可输出 `case_candidates.csv` 候选打分表
 2. `01_export_cst_states.py`
    导出每个 case 的 `Construction State Twin`
 3. `02_generate_reports.py`
