@@ -6,6 +6,7 @@
 
 - [项目总说明](docs/research_overview.md)
 - [最终版方法框架](docs/final_method_framework.md)
+- [实验操作教程与后续实验清单](docs/experiment_tutorial.md)
 - [实验设计与组织方案](docs/experiment_plan.md)
 - [论文大纲建议](docs/paper_outline.md)
 - [后端清单](docs/backend_inventory.md)
