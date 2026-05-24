@@ -6,8 +6,8 @@
 
 - [项目总说明](docs/research_overview.md)
 - [最终版方法框架](docs/final_method_framework.md)
-- [实验操作教程与后续实验清单](docs/experiment_tutorial.md)
-- [实验设计与组织方案](docs/experiment_plan.md)
+- [论文实验部分草稿](docs/experiment_section_draft.md)
+- [实验操作教程与当前进度](docs/experiment_tutorial.md)
 - [论文大纲建议](docs/paper_outline.md)
 - [后端清单](docs/backend_inventory.md)
 - [Agent 设计说明](docs/agent_v2.md)
@@ -17,18 +17,21 @@
 
 ## 论文实验目录
 
-仓库根目录新增了 [experiments](experiments/README.md) 目录，用于承载论文实验脚本、配置和输出目录骨架。它和业务主链分开维护，便于后续做：
+仓库根目录的 [experiments](experiments/README.md) 目录用于承载论文实验脚本、实验配置和实验输出。当前已经覆盖：
 
 - case 冻结
 - `CST` 状态导出
 - `Template / Direct-LLM / CST-LLM` 报告生成
-- 人工评分表与指标汇总
-- 消融计划与追溯表
+- 主实验人工评分与指标汇总
+- 追溯实验
+- 消融实验
+- 多源贡献实验
+- 轻量级状态连续性分析
 
 ## 当前主线
 
 1. 读取 TBM 日运行 `CSV`
-2. 解析 `TSP / HSP / 掌子面素描 PDF`
+2. 解析 `TSP / HSP / 掌子面素描` PDF
 3. 按统一里程轴做地质-施工融合
 4. 计算区段级 `GRS / RAI / GRCI`
 5. 构建轻量化数字孪生状态
@@ -36,24 +39,16 @@
 
 ## 当前算法版本
 
-- `GRS`：基于多源地质证据的区段关注度表征，采用分量归一化和平权聚合
-- `RAI`：基于 `Isolation Forest` 的施工响应异常度表征，并对常规环级停顿做惩罚折减
+- `GRS`：基于多源地质证据的区段关注度表征，采用分量归一化与平权聚合
+- `RAI`：基于 `Isolation Forest` 的施工响应异常表征，并对常规环级停顿做惩罚折减
 - `GRCI`：基于同步、滞后、变化与一致性的地质-施工耦合验证
 - 地质侧引入高斯衰减平滑，减弱固定 `10m` 分段带来的边界切割效应
-
-## 主要能力
-
-- 工况分段、施工状态识别、效率分析、气体统计
-- 多源地质证据解析、导入、去重、SQLite 落库
-- 区段地质关注、施工响应异常、耦合验证与前方提示
-- 轻量化数字孪生状态摘要
-- LLM 日报、时段报告、会话式 Supervisor Agent 问答
 
 ## 项目定位
 
 这个项目更准确的定位不是“风险识别系统”，而是：
 
-**一个面向 TBM 施工报告自动化生成的数字孪生-大语言模型协同框架。**
+**一个面向 TBM 施工报告自动生成的数字孪生-大语言模型协同框架。**
 
 其中：
 

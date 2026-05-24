@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from pathlib import Path
 
-from common import CASES_DIR, METRICS_DIR, ensure_experiment_dirs, load_case_csv, write_rows_csv
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+OUTPUTS_DIR = ROOT_DIR / "experiments" / "outputs"
+CASES_DIR = OUTPUTS_DIR / "cases"
+METRICS_DIR = OUTPUTS_DIR / "metrics"
 
 
 ABLATION_VARIANTS = [
@@ -27,6 +32,29 @@ ABLATION_VARIANTS = [
         "Keep CST base state but remove indicator-guided attention summarization.",
     ),
 ]
+
+
+def ensure_experiment_dirs() -> None:
+    """Create the local experiment output directories required by this script."""
+    CASES_DIR.mkdir(parents=True, exist_ok=True)
+    METRICS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def load_case_csv(path: Path) -> list[dict[str, str]]:
+    """Load experiment cases from CSV without importing backend-dependent helpers."""
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def write_rows_csv(path: Path, rows: list[dict[str, str]]) -> None:
+    """Write rows to a UTF-8 CSV file."""
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def parse_args() -> argparse.Namespace:
