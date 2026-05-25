@@ -197,6 +197,11 @@ def _run_geology_analysis(df: pd.DataFrame) -> dict:
         evidence_df = load_evidence_db(EVIDENCE_DB_PATH)
         df_geo = attach_geology_labels(df, evidence_df)
         df_geo = annotate_routine_ring_building_stops(df_geo)
+        current_chainage = None
+        if "chainage" in df_geo.columns:
+            valid_chainage = pd.to_numeric(df_geo["chainage"], errors="coerce").dropna()
+            if not valid_chainage.empty:
+                current_chainage = float(valid_chainage.iloc[-1])
 
         segment_df = run_segment_analysis(df_geo, segment_length=10)
         coupling_analysis_result = run_coupling_analysis(
@@ -229,7 +234,10 @@ def _run_geology_analysis(df: pd.DataFrame) -> dict:
             "geo_summary_record": geo_summary_record,
             "geo_summary_segment": geo_summary_segment,
             "geo_text": geology_summary_to_text(geo_summary_segment),
-            "face_geo_text": build_face_geo_text(evidence_df),
+            "face_geo_text": build_face_geo_text(
+                evidence_df,
+                current_chainage=current_chainage,
+            ),
             "forward_risk_summary": forward_risk_summary,
             "forward_risk_text": forward_risk_to_text(forward_risk_summary),
             "coupling_summary": coupling_summary,
