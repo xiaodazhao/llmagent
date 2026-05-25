@@ -4,15 +4,15 @@ from services.cst_update_service import summarize_cst_for_prompt
 
 
 def _format_list(values) -> str:
-    """Format list-like values for compact prompt text."""
+    """Format list-like values for compact Chinese prompt text."""
     if not values:
-        return "none"
+        return "无"
     if isinstance(values, str):
         text = values.strip()
-        return text or "none"
+        return text or "无"
     if isinstance(values, (list, tuple, set)):
         cleaned = [str(item).strip() for item in values if str(item).strip()]
-        return ", ".join(cleaned) if cleaned else "none"
+        return "、".join(cleaned) if cleaned else "无"
     return str(values)
 
 
@@ -22,15 +22,31 @@ def _summary_block(llm_summary: dict) -> str:
     if isinstance(cst, dict) and cst:
         return summarize_cst_for_prompt(cst)
 
-    base = llm_summary.get("基础工况统计", {})
-    geo = llm_summary.get("地质摘要_区段级", {})
-    forward = llm_summary.get("前方风险提示摘要", {})
-    coupling = llm_summary.get("区段风险-施工响应耦合分析", {})
+    operation = (
+        llm_summary.get("基础工况统计")
+        or llm_summary.get("operation_summary")
+        or {}
+    )
+    geology = (
+        llm_summary.get("地质摘要_区段级")
+        or llm_summary.get("geology_summary_segment")
+        or {}
+    )
+    forward = (
+        llm_summary.get("前方风险提示摘要")
+        or llm_summary.get("forward_risk_summary")
+        or {}
+    )
+    coupling = (
+        llm_summary.get("区段风险-施工响应耦合分析")
+        or llm_summary.get("coupling_summary")
+        or {}
+    )
     lines = [
-        f"- Operation summary: work={base.get('work_total_min', 0)} min, stop={base.get('stop_total_min', 0)} min, abnormal_count={base.get('abnormal_count', 0)}.",
-        f"- Geological summary: high_risk_segments={geo.get('high_risk_segment_count', 0)}, multi_source_segments={geo.get('multi_source_segment_count', 0)}.",
-        f"- Forward attention: level={forward.get('advice_level', 'none')}, high_risk_count={forward.get('high_risk_count', 0)}, hazards={_format_list(forward.get('main_hazards', []))}.",
-        f"- Coupling summary: {coupling.get('summary_text', 'none')}",
+        f"- 施工概况：工作 {operation.get('work_total_min', 0)} min，停机 {operation.get('stop_total_min', 0)} min，异常次数 {operation.get('abnormal_count', 0)}。",
+        f"- 地质概况：高关注区段 {geology.get('high_risk_segment_count', 0)} 个，多源支撑区段 {geology.get('multi_source_segment_count', 0)} 个。",
+        f"- 前方提示：等级={forward.get('advice_level', '无')}，高风险段数={forward.get('high_risk_count', 0)}，主要风险={_format_list(forward.get('main_hazards', []))}。",
+        f"- 耦合摘要：{coupling.get('summary_text', '无')}",
     ]
     return "\n".join(lines)
 
@@ -48,83 +64,98 @@ def build_prompt(
     risk_prob_text: str,
 ) -> str:
     """Build the daily TBM report prompt."""
-    coupling_text = llm_summary.get("区段风险-施工响应耦合分析", "none")
-    twin_text = llm_summary.get("数字孪生状态", "none")
-    history_text = llm_summary.get("施工历史记忆对比", {}).get("comparison_text", "No history comparison is available.")
-    forward_risk_text = llm_summary.get("前方风险提示文本", "none")
+    coupling_text = (
+        llm_summary.get("区段风险-施工响应耦合分析")
+        or llm_summary.get("coupling_summary")
+        or "无"
+    )
+    twin_text = (
+        llm_summary.get("数字孪生状态")
+        or llm_summary.get("digital_twin_state")
+        or "无"
+    )
+    history_text = (
+        llm_summary.get("施工历史记忆对比", {}).get("comparison_text")
+        or llm_summary.get("history_comparison")
+        or "暂无历史对比信息。"
+    )
+    forward_risk_text = (
+        llm_summary.get("前方风险提示文本")
+        or llm_summary.get("forward_risk_text")
+        or "无"
+    )
     summary_block = _summary_block(llm_summary)
 
     return f"""
-You are writing a formal TBM comprehensive construction condition analysis report.
+你现在要撰写一份正式的《TBM综合施工工况分析报告》。
 
-Role:
-You are a TBM construction analysis engineer preparing a formal engineering report for project managers and technical staff. Use objective, concise, engineering-oriented language.
+角色定位：
+你是一名TBM施工分析工程师，面向项目管理和技术人员输出正式工程报告。请使用客观、简洁、审慎、工程化的中文表达。
 
-Key constraints:
-1. Output the report directly. Do not add conversational introductions.
-2. Use only the provided information. Do not invent unsupported numbers or field observations.
-3. Treat GRS as geological attention, RAI as response anomaly, and GRCI as geo-response coupling evidence. Do not describe them as confirmed hazard probabilities.
-4. Strictly separate current face observations from forward geological attention.
-5. Use cautious wording such as "requires attention", "suggests", or "indicates" for risk-related statements.
-6. Do not treat every stoppage as abnormal obstruction. Consider routine pauses and regular construction rhythm.
-7. Preserve spatial continuity. Avoid describing adjacent segments as abruptly contradictory unless the evidence clearly supports that.
-8. If evidence coverage is limited, state that interpretation should remain cautious.
+写作约束：
+1. 直接输出正式报告正文，不要写聊天式开场白。
+2. 只能依据给定信息写作，不要虚构数字、现象或现场结论。
+3. GRS 表示地质关注度，RAI 表示施工响应异常度，GRCI 表示地质-施工耦合关注证据，不能把它们写成已证实的灾害概率。
+4. 必须严格区分“当前掌子面揭示情况”和“前方区段关注提示”。
+5. 风险相关表述应使用“需关注”“提示”“表明”“显示”等审慎措辞，不能夸大成“已经发生灾害”。
+6. 不能把所有停机都写成异常受阻，应结合常规停顿和施工节奏审慎判断。
+7. 应保持空间连续性，除非证据非常明确，不要把相邻区段写成完全相反的结论。
+8. 如果证据覆盖有限，应明确说明结论需谨慎解释。
 
-Title:
-TBM Comprehensive Construction Condition Analysis Report
+报告标题：
+TBM综合施工工况分析报告
 
-Required sections:
-1. Executive Summary
-2. Overall Operation Overview
-3. Basic Operation Statistics
-4. Construction State Identification
-5. Construction Efficiency Analysis
-6. Construction Stability Analysis
-7. Current Face Geological Condition
-8. Forward Geological Attention and Geo-Response Coupling Analysis
-9. Gas Monitoring Analysis
-10. Forward Section Attention Reminder
-11. Conclusions and Recommendations
+建议章节：
+1. 综合结论摘要
+2. 总体施工运行概况
+3. 基础工况统计分析
+4. 施工状态识别与特征分析
+5. 施工效率与稳定性分析
+6. 当前掌子面地质情况
+7. 前方区段地质关注与地质-施工耦合分析
+8. 气体监测分析
+9. 前方区段关注提示
+10. 结论与建议
 
-Structured CST summary:
+结构化 CST 摘要：
 {summary_block}
 
-Basic operation segments:
+基础工况分段：
 {seg_text}
 
-Basic statistics:
+基础统计：
 {stats_text}
 
-Construction states:
+施工状态：
 {state_text}
 
-Efficiency statistics:
+效率统计：
 {eff_text}
 
-State statistics:
+状态统计：
 {state_stats_text}
 
-Current face geological condition:
+当前掌子面地质情况：
 {face_geo_text}
 
-Forward geological fusion analysis:
+前方区段地质融合分析：
 {geo_text}
 
-Additional section-level attention analysis:
+补充区段关注分析：
 {risk_prob_text}
 
-Geo-response coupling analysis:
+地质-施工耦合分析：
 {coupling_text}
 
-Digital twin snapshot:
+数字孪生快照：
 {twin_text}
 
-History comparison:
+历史对比：
 {history_text}
 
-Gas analysis:
+气体分析：
 {gas_text}
 
-Forward risk reminder:
+前方风险提示：
 {forward_risk_text}
 """

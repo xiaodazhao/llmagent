@@ -12,8 +12,8 @@ from services.sqlite_storage_service import load_previous_cst_for_context, save_
 from utils.serialization import serialize_for_json
 
 
-NO_DATA_TEXT = "N/A"
-NO_HISTORY_TEXT = "No previous CST state is available."
+NO_DATA_TEXT = "暂无"
+NO_HISTORY_TEXT = "暂无上一状态可供比较。"
 STATE_VERSION = "recursive_cst_v2"
 MAX_PERSISTENT_SEGMENTS = 5
 MAX_PERSISTENT_HAZARDS = 8
@@ -446,13 +446,13 @@ def summarize_cst_delta(previous_cst: dict[str, Any] | None, current_cst: dict[s
     prev_geo = previous_cst.get("geological_state", {})
     cur_geo = current_cst.get("geological_state", {})
 
-    lines = [f"Previous state date: {previous_cst.get('date') or 'unknown'}"]
-    prev_main = _safe_text(prev_op.get("main_state"), "unknown")
-    cur_main = _safe_text(cur_op.get("main_state"), "unknown")
+    lines = [f"上一状态日期：{previous_cst.get('date') or '未知'}。"]
+    prev_main = _safe_text(prev_op.get("main_state"), "未知")
+    cur_main = _safe_text(cur_op.get("main_state"), "未知")
     if prev_main == cur_main:
-        lines.append(f"Main operation state remained {cur_main}.")
+        lines.append(f"主导工况保持为 {cur_main}。")
     else:
-        lines.append(f"Main operation state changed from {prev_main} to {cur_main}.")
+        lines.append(f"主导工况由 {prev_main} 变化为 {cur_main}。")
 
     prev_rai = _safe_float(prev_resp.get("RAI"), 0.0) or 0.0
     cur_rai = _safe_float(cur_resp.get("RAI"), 0.0) or 0.0
@@ -460,21 +460,21 @@ def summarize_cst_delta(previous_cst: dict[str, Any] | None, current_cst: dict[s
     cur_grs = _safe_float(cur_att.get("GRS"), 0.0) or 0.0
     prev_grci = _safe_float(prev_att.get("GRCI"), 0.0) or 0.0
     cur_grci = _safe_float(cur_att.get("GRCI"), 0.0) or 0.0
-    lines.append(f"RAI delta: {cur_rai - prev_rai:+.2f}.")
-    lines.append(f"GRS delta: {cur_grs - prev_grs:+.2f}.")
-    lines.append(f"GRCI delta: {cur_grci - prev_grci:+.2f}.")
+    lines.append(f"RAI 变化量：{cur_rai - prev_rai:+.2f}。")
+    lines.append(f"GRS 变化量：{cur_grs - prev_grs:+.2f}。")
+    lines.append(f"GRCI 变化量：{cur_grci - prev_grci:+.2f}。")
 
     previous_hazards = set(_split_hazard_text(prev_geo.get("hazards")))
     current_hazards = set(_split_hazard_text(cur_geo.get("hazards")))
     new_hazards = sorted(current_hazards - previous_hazards)
     if new_hazards:
-        lines.append(f"New geological attention tags: {', '.join(new_hazards)}.")
+        lines.append(f"新增地质关注标签：{'、'.join(new_hazards)}。")
     elif current_hazards:
-        lines.append(f"Geological attention persisted as: {', '.join(sorted(current_hazards))}.")
+        lines.append(f"延续的地质关注标签：{'、'.join(sorted(current_hazards))}。")
 
     changed_fields = current_cst.get("provenance_state", {}).get("changed_fields", [])
     if changed_fields:
-        lines.append(f"Changed field groups: {', '.join(changed_fields)}.")
+        lines.append(f"变化字段组：{'、'.join(changed_fields)}。")
 
     return " ".join(lines)
 
@@ -482,7 +482,7 @@ def summarize_cst_delta(previous_cst: dict[str, Any] | None, current_cst: dict[s
 def summarize_cst_for_prompt(cst_state: dict[str, Any] | None) -> str:
     """Build a compact CST-only summary block for prompts and reports."""
     if not isinstance(cst_state, dict) or not cst_state:
-        return "- CST unavailable."
+        return "- 暂无可用的 CST 状态。"
 
     temporal = cst_state.get("temporal_state", {})
     spatial = cst_state.get("spatial_state", {})
@@ -498,17 +498,17 @@ def summarize_cst_for_prompt(cst_state: dict[str, Any] | None) -> str:
     forward_hazards = forward_attention.get("main_hazards", []) or []
 
     lines = [
-        f"- Analysis mode: {temporal.get('analysis_mode', 'daily')}, samples={temporal.get('sample_count', 0)}.",
-        f"- Spatial state: face_chainage={spatial.get('face_chainage')}, advance_length={spatial.get('advance_length')}, forward_level={spatial.get('forward_focus_level') or forward_attention.get('advice_level', 'none')}.",
-        f"- Operation state: main_state={operation.get('main_state', 'N/A')}, work={operation.get('working_duration_min', 0)} min, stop={operation.get('stoppage_duration_min', 0)} min.",
-        f"- Geological state: grade={geo.get('segment_grade')}, hazards={', '.join(_split_hazard_text(geo.get('hazards'))) or 'none'}, evidence_count={geo.get('evidence_count', 0)}.",
-        f"- Response state: RAI={float(response.get('RAI') or 0.0):.2f}, anomaly_type={response.get('anomaly_type') or 'none'}, key_parameters={', '.join(response.get('key_parameters', []) or []) or 'none'}.",
-        f"- Attention state: GRS={float(attention.get('GRS') or 0.0):.2f}, GRCI={float(attention.get('GRCI') or 0.0):.2f}, trend={attention.get('trend_label', 'stable')}, forward_hazards={', '.join(forward_hazards) or 'none'}.",
-        f"- Provenance: confidence={float(provenance.get('state_confidence') or 0.0):.2f}, stability={float(temporal.get('state_stability') or 0.0):.2f}, changed_fields={', '.join(provenance.get('changed_fields', []) or []) or 'none'}.",
+        f"- 分析模式：{temporal.get('analysis_mode', 'daily')}，样本数={temporal.get('sample_count', 0)}。",
+        f"- 空间状态：掌子面里程={spatial.get('face_chainage')}，推进长度={spatial.get('advance_length')}，前方关注等级={spatial.get('forward_focus_level') or forward_attention.get('advice_level', '无')}。",
+        f"- 运行状态：主导工况={operation.get('main_state', '暂无')}，工作={operation.get('working_duration_min', 0)} min，停机={operation.get('stoppage_duration_min', 0)} min。",
+        f"- 地质状态：围岩等级={geo.get('segment_grade')}，关注标签={'、'.join(_split_hazard_text(geo.get('hazards'))) or '无'}，证据数={geo.get('evidence_count', 0)}。",
+        f"- 响应状态：RAI={float(response.get('RAI') or 0.0):.2f}，异常类型={response.get('anomaly_type') or '无'}，关键参数={'、'.join(response.get('key_parameters', []) or []) or '无'}。",
+        f"- 关注状态：GRS={float(attention.get('GRS') or 0.0):.2f}，GRCI={float(attention.get('GRCI') or 0.0):.2f}，趋势={attention.get('trend_label', 'stable')}，前方主要风险={'、'.join(forward_hazards) or '无'}。",
+        f"- 状态可信性：confidence={float(provenance.get('state_confidence') or 0.0):.2f}，stability={float(temporal.get('state_stability') or 0.0):.2f}，变化字段={'、'.join(provenance.get('changed_fields', []) or []) or '无'}。",
     ]
     previous_change_summary = provenance.get("previous_change_summary")
     if previous_change_summary:
-        lines.append(f"- Previous-state delta: {previous_change_summary}")
+        lines.append(f"- 与上一状态对比：{previous_change_summary}")
     return "\n".join(lines)
 
 
