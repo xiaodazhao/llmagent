@@ -108,6 +108,26 @@ def ensure_storage_initialized() -> None:
 
                 CREATE INDEX IF NOT EXISTS idx_agent_messages_session
                 ON agent_messages (session_id, message_id);
+
+                CREATE TABLE IF NOT EXISTS cst_states (
+                    cst_id TEXT PRIMARY KEY,
+                    state_key TEXT NOT NULL UNIQUE,
+                    date TEXT,
+                    analysis_mode TEXT,
+                    start_time TEXT,
+                    end_time TEXT,
+                    source_path TEXT,
+                    previous_cst_id TEXT,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_cst_states_date
+                ON cst_states (date, updated_at);
+
+                CREATE INDEX IF NOT EXISTS idx_cst_states_previous
+                ON cst_states (previous_cst_id);
                 """
             )
 
@@ -490,3 +510,169 @@ def clear_file_cache_entries(namespace: str | None = None) -> None:
             conn.execute("DELETE FROM file_cache_entries")
         else:
             conn.execute("DELETE FROM file_cache_entries WHERE namespace = ?", (namespace,))
+
+
+def save_cst_state(state: dict) -> None:
+    """Persist a canonical CST snapshot."""
+    ensure_storage_initialized()
+    payload = serialize_for_json(state or {})
+    cst_id = str(payload.get("cst_id") or "")
+    state_key = str(payload.get("state_key") or "")
+    if not cst_id or not state_key:
+        return
+
+    time_window = payload.get("time_window", {}) if isinstance(payload.get("time_window"), dict) else {}
+    provenance = payload.get("provenance_state", {}) if isinstance(payload.get("provenance_state"), dict) else {}
+    sources = provenance.get("state_update_sources", []) if isinstance(provenance, dict) else []
+    source_path = None
+    if isinstance(sources, list):
+        for item in sources:
+            if isinstance(item, dict) and item.get("type") == "csv" and item.get("path"):
+                source_path = str(item.get("path"))
+                break
+
+    with _connect() as conn:
+        created_at = _now_text()
+        existing = conn.execute(
+            "SELECT created_at FROM cst_states WHERE state_key = ?",
+            (state_key,),
+        ).fetchone()
+        if existing:
+            created_at = str(existing["created_at"])
+        conn.execute(
+            """
+            INSERT INTO cst_states (
+                cst_id, state_key, date, analysis_mode, start_time, end_time,
+                source_path, previous_cst_id, payload_json, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(state_key) DO UPDATE SET
+                cst_id = excluded.cst_id,
+                date = excluded.date,
+                analysis_mode = excluded.analysis_mode,
+                start_time = excluded.start_time,
+                end_time = excluded.end_time,
+                source_path = excluded.source_path,
+                previous_cst_id = excluded.previous_cst_id,
+                payload_json = excluded.payload_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                cst_id,
+                state_key,
+                payload.get("date"),
+                payload.get("temporal_state", {}).get("analysis_mode"),
+                time_window.get("start_time"),
+                time_window.get("end_time"),
+                source_path,
+                payload.get("previous_cst_id"),
+                json.dumps(payload, ensure_ascii=False),
+                created_at,
+                _now_text(),
+            ),
+        )
+
+
+def load_cst_state(cst_id: str) -> dict | None:
+    """Load one CST snapshot by id."""
+    ensure_storage_initialized()
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT payload_json
+            FROM cst_states
+            WHERE cst_id = ?
+            """,
+            (str(cst_id),),
+        ).fetchone()
+    return json.loads(row["payload_json"]) if row else None
+
+
+def load_cst_state_by_key(state_key: str) -> dict | None:
+    """Load one CST snapshot by stable state key."""
+    ensure_storage_initialized()
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT payload_json
+            FROM cst_states
+            WHERE state_key = ?
+            """,
+            (str(state_key),),
+        ).fetchone()
+    return json.loads(row["payload_json"]) if row else None
+
+
+def load_latest_cst_state(before_date: str | None = None) -> dict | None:
+    """Load the latest persisted CST before a target date."""
+    ensure_storage_initialized()
+    with _connect() as conn:
+        if before_date:
+            row = conn.execute(
+                """
+                SELECT payload_json
+                FROM cst_states
+                WHERE date < ?
+                ORDER BY date DESC, updated_at DESC
+                LIMIT 1
+                """,
+                (str(before_date),),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT payload_json
+                FROM cst_states
+                ORDER BY date DESC, updated_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+    return json.loads(row["payload_json"]) if row else None
+
+
+def load_previous_cst_for_context(
+    *,
+    date: str | None,
+    analysis_mode: str,
+    end_time: str | None = None,
+) -> dict | None:
+    """Load the most relevant previous CST for a new daily or time-window update."""
+    ensure_storage_initialized()
+    with _connect() as conn:
+        row = None
+        if analysis_mode == "time_window" and date and end_time:
+            row = conn.execute(
+                """
+                SELECT payload_json
+                FROM cst_states
+                WHERE analysis_mode = 'time_window'
+                  AND (
+                    (date = ? AND end_time < ?)
+                    OR date < ?
+                  )
+                ORDER BY date DESC, end_time DESC, updated_at DESC
+                LIMIT 1
+                """,
+                (str(date), str(end_time), str(date)),
+            ).fetchone()
+        elif date:
+            row = conn.execute(
+                """
+                SELECT payload_json
+                FROM cst_states
+                WHERE date < ?
+                ORDER BY date DESC, updated_at DESC
+                LIMIT 1
+                """,
+                (str(date),),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT payload_json
+                FROM cst_states
+                ORDER BY date DESC, updated_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+    return json.loads(row["payload_json"]) if row else None

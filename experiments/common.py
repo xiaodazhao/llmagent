@@ -156,7 +156,21 @@ def load_case_context(case: dict[str, Any]) -> CaseContext:
     csv_path, df = load_csv_by_date(case["date"])
     if case.get("time_start") and case.get("time_end"):
         df = load_df_by_time(df, case["time_start"], case["time_end"])
-    result = analyze_tbm_data(df)
+    result = analyze_tbm_data(
+        df,
+        context={
+            "date": case["date"],
+            "analysis_mode": "time_window" if case.get("time_start") and case.get("time_end") else "daily",
+            "time_start": case.get("time_start"),
+            "time_end": case.get("time_end"),
+            "chainage_start": case.get("chainage_start"),
+            "chainage_end": case.get("chainage_end"),
+            "case_id": case.get("case_id"),
+            "source_path": str(csv_path),
+            "source_name": csv_path.name,
+            "persist_cst": True,
+        },
+    )
     return CaseContext(case=case, csv_path=csv_path, df=df, result=result)
 
 
@@ -296,6 +310,12 @@ def _split_hazard_text(value: Any) -> list[str]:
 def build_cst_state(case: dict[str, Any], context: CaseContext) -> dict[str, Any]:
     """Export a normalized CST state payload for experiments."""
     result = context.result
+    if result.get("cst_state"):
+        cst_state = deepcopy(result["cst_state"])
+        if case.get("case_id") and not cst_state.get("case_id"):
+            cst_state["case_id"] = case["case_id"]
+        return serialize_for_json(cst_state)
+
     twin = deepcopy(result.get("digital_twin_state") or {})
     llm_summary = deepcopy(result.get("llm_summary") or {})
     coupling_summary = deepcopy(result.get("coupling_summary") or {})

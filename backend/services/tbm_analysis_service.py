@@ -26,7 +26,9 @@ from geology.segment_analysis import (
     run_segment_analysis,
     build_typical_segments_table,
 )
+from services.sqlite_storage_service import save_cst_state
 from services.digital_twin_state import build_digital_twin_state
+from services.cst_update_service import build_or_update_cst
 from utils.chainage_utils import format_chainage_dk
 from utils.serialization import serialize_for_json
 
@@ -386,9 +388,10 @@ def _build_llm_summary(
     coupling_validation: dict,
     high_attention_segments: list,
     digital_twin_state: dict,
+    cst_state: dict | None = None,
 ) -> dict:
     """Build llm summary."""
-    return {
+    summary = {
         "基础工况统计": stats,
         "施工状态标签": state_labels,
         "施工状态统计": state_stats,
@@ -406,10 +409,15 @@ def _build_llm_summary(
         "耦合分析高关注区段": high_attention_segments,
         "数字孪生状态": digital_twin_state,
     }
+    if cst_state:
+        summary["Construction State Twin"] = cst_state
+        summary["CST"] = cst_state
+    return summary
 
 
-def analyze_tbm_data(df: pd.DataFrame):
+def analyze_tbm_data(df: pd.DataFrame, context: dict | None = None):
     """Analyze tbm data."""
+    context = context or {}
     geology_result = _run_geology_analysis(df)
     operation_result = _run_operation_analysis(geology_result["df_geo"])
     state_result = _run_state_analysis(geology_result["df_geo"])
@@ -431,6 +439,25 @@ def analyze_tbm_data(df: pd.DataFrame):
         forward_risk_summary=geology_result["forward_risk_summary"],
         coupling_summary=geology_result["coupling_summary"],
     )
+    cst_state = build_or_update_cst(
+        {
+            "stats": operation_result["stats"],
+            "state_stats": state_result["state_stats"],
+            "gas_stats": gas_result["gas_stats"],
+            "geo_summary_record": geology_result["geo_summary_record"],
+            "geo_summary_segment": geology_result["geo_summary_segment"],
+            "forward_risk_summary": geology_result["forward_risk_summary"],
+            "coupling_summary": geology_result["coupling_summary"],
+            "digital_twin_state": digital_twin_state,
+            "llm_summary": {},
+            "face_geo_text": geology_result["face_geo_text"],
+            "high_attention_segments": geology_result["high_attention_segments"],
+            "warnings": warnings,
+        },
+        case_id=context.get("case_id"),
+        context=context,
+        persist=False,
+    )
     llm_summary = _build_llm_summary(
         stats=operation_result["stats"],
         state_labels=state_result["state_labels"],
@@ -448,7 +475,11 @@ def analyze_tbm_data(df: pd.DataFrame):
         coupling_validation=geology_result["coupling_validation"],
         high_attention_segments=geology_result["high_attention_segments"],
         digital_twin_state=digital_twin_state,
+        cst_state=cst_state,
     )
+    cst_state["llm_summary"] = llm_summary
+    if cst_state.get("state_key"):
+        save_cst_state(cst_state)
 
     return {
         "segments": operation_result["segments"],
@@ -479,6 +510,7 @@ def analyze_tbm_data(df: pd.DataFrame):
         "coupling_output_paths": geology_result["coupling_output_paths"],
         "high_attention_segments": geology_result["high_attention_segments"],
         "digital_twin_state": digital_twin_state,
+        "cst_state": cst_state,
         "llm_summary": llm_summary,
         "face_geo_text": geology_result["face_geo_text"],
         "risk_prob_text": risk_prob_text,

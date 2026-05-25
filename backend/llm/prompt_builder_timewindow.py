@@ -1,3 +1,25 @@
+from __future__ import annotations
+
+from services.cst_update_service import summarize_cst_for_prompt
+
+
+def _summary_block(llm_summary: dict) -> str:
+    """Build a compact CST-aware summary block for time-window prompts."""
+    cst = llm_summary.get("CST") or llm_summary.get("Construction State Twin") or {}
+    if isinstance(cst, dict) and cst:
+        return summarize_cst_for_prompt(cst)
+
+    base = llm_summary.get("基础工况统计", {})
+    coupling = llm_summary.get("区段风险-施工响应耦合分析", {})
+    forward = llm_summary.get("前方风险提示摘要", {})
+    lines = [
+        f"- Operation summary: work={base.get('work_total_min', 0)} min, stop={base.get('stop_total_min', 0)} min.",
+        f"- Forward attention: level={forward.get('advice_level', 'none')}, high_risk_count={forward.get('high_risk_count', 0)}.",
+        f"- Coupling summary: {coupling.get('summary_text', 'none')}",
+    ]
+    return "\n".join(lines)
+
+
 def build_prompt_timewindow(
     start_time: str,
     end_time: str,
@@ -11,103 +33,66 @@ def build_prompt_timewindow(
     llm_summary: dict,
 ) -> str:
     """Build the time-window TBM report prompt."""
-    forward_risk_text = llm_summary.get("前方风险提示文本", "无")
-    coupling_text = llm_summary.get("区段风险-施工响应耦合分析", "无")
-    twin_text = llm_summary.get("数字孪生状态", "无")
+    forward_risk_text = llm_summary.get("前方风险提示文本", "none")
+    coupling_text = llm_summary.get("区段风险-施工响应耦合分析", "none")
+    twin_text = llm_summary.get("数字孪生状态", "none")
+    summary_block = _summary_block(llm_summary)
 
     return f"""
-请直接编写一份正式的《TBM施工时段工况分析报告》。
+Please write a formal TBM time-window construction condition analysis report.
 
-# 写作身份
-你是 TBM 施工分析工程师。报告面向工程管理与技术人员，语言必须保持客观、克制、完整，符合正式工程技术报告语体。
+Window:
+start_time={start_time}
+end_time={end_time}
 
-【分析时段】
-起始时间：{start_time}
-结束时间：{end_time}
+Key constraints:
+1. Focus only on the specified time window.
+2. Use only the provided information and keep the wording engineering-oriented.
+3. Do not turn attention prompts into confirmed hazard claims.
+4. Separate current observations from forward attention.
+5. Do not treat routine stoppages as abnormal obstruction without clear supporting evidence.
+6. If evidence coverage is limited, explicitly state that the interpretation should remain cautious.
 
-【总体要求】
-1. 直接输出报告正文，不要输出引导语或说明性前言。
-2. 该报告是“时段分析”，重点关注该时间窗内的运行状态、工况波动、局部异常、效率变化及地质响应，不要按全天总结的口吻泛泛而谈。
-3. 所有判断必须依据输入信息，不得虚构。
-4. 风险表述必须审慎：
-   - “关注”“提示”“可能”“表现出”不等于“已发生”或“已确认”；
-   - 地质融合结果代表区段地质关注度，不代表地质真值；
-   - `GRS` 是区段地质关注度表征；
-   - `RAI` 是施工响应异常度表征；
-   - `GRCI` 是地质关注与施工响应之间的耦合验证结果。
-5. 停机、零速或节奏中断不必然代表异常受阻。若更像常规工序停顿，应采用审慎表述。
-6. 相邻区段可能存在连续影响，不要把边界两侧写成截然对立的结论，除非输入非常明确。
-7. 如果该时段样本量偏少、持续时间较短或统计结果不稳定，应明确写出“该时段解释需谨慎”。
+Required sections:
+1. Time-Window Overview
+2. Operation State and Rhythm
+3. Construction State and Efficiency
+4. Stability and Local Anomalies
+5. Geological Attention and Geo-Response Analysis
+6. Gas Monitoring
+7. Forward Attention Reminder
+8. Conclusions and Recommendations
 
-【报告标题】
-TBM施工时段工况分析报告
+Structured CST summary:
+{summary_block}
 
-【报告结构】
-请严格按以下章节输出：
-
-一、时段概述
-概述该时段在全天施工中的性质，例如属于稳定掘进时段、停机调整时段、状态波动时段或局部异常关注时段，并给出总体判断。
-
-二、运行状态与工况变化
-结合停机、过渡、稳定掘进、异常段的分布，分析该时段运行节奏及工况转换特征，说明是否存在频繁启停、短时切换或明显扰动。
-
-三、施工状态与效率特征
-结合隐含施工状态识别和效率统计，分析该时段主要施工状态类型、负载特征及推进效率表现，重点说明是否存在高负载低速、效率偏低或状态不协调现象。
-
-四、稳定性与异常波动分析
-围绕状态切换、连续作业能力、参数波动及异常表现，判断该时段施工是否稳定，并说明其对效率和设备运行的可能影响。
-
-五、地质关注与施工响应分析
-分析该时段对应区段是否存在较高关注区、多源共同关注区及主要关注类型，并重点讨论地质关注是否与施工响应表现出一致性。可以结合 `GRS / RAI / GRCI` 做解释，但不得把提示写成已确认灾害。
-
-六、气体监测情况
-客观分析该时段内气体指标表现。若未见明显异常，应明确说明；若存在异常但工程意义不清，应说明解释需谨慎。
-
-七、前方区段提示
-基于当前时段结束时的掘进位置，结合前方区段信息，对后续施工关注重点进行说明。该部分属于提示性信息，不是强制施工指令。
-
-八、结论与建议
-围绕该时段的运行状态、效率、稳定性、地质关注和气体监测情况进行总结，并提出 2 到 4 条工程化建议。建议应具体、审慎、可执行，但不能写成绝对化指令。
-
-【特别注意】
-- 不要照搬原始字段名。
-- 不要把施工状态聚类结果直接当作真实围岩类别。
-- 不要把风险提示写成灾害已发生。
-- 不要遗漏“前方区段提示”这一节。
-- 请输出完整报告正文，不要写成问答式答案。
-
-以下为可供写作使用的输入信息，请以结构化摘要为主、文本分析结果为辅进行整合。
-
-【结构化摘要】
-{llm_summary}
-
-【基础工况分段】
+Basic operation segments:
 {seg_text}
 
-【基础统计】
+Basic statistics:
 {stats_text}
 
-【施工状态】
+Construction states:
 {state_text}
 
-【效率统计】
+Efficiency statistics:
 {eff_text}
 
-【状态统计】
+State statistics:
 {state_stats_text}
 
-【地质分析】
+Geological analysis:
 {geo_text}
 
-【区段风险-施工响应耦合分析】
+Geo-response coupling analysis:
 {coupling_text}
 
-【数字孪生状态摘要】
+Digital twin snapshot:
 {twin_text}
 
-【气体分析】
+Gas analysis:
 {gas_text}
 
-【前方区段风险提示】
+Forward risk reminder:
 {forward_risk_text}
 """

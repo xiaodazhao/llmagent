@@ -91,11 +91,13 @@ class GeologyPayload(BaseModel):
     coupling_output_paths: dict[str, Any] = Field(default_factory=dict)
     high_attention_segments: list[dict[str, Any]] = Field(default_factory=list)
     digital_twin_state: dict[str, Any] = Field(default_factory=dict)
+    cst_state: dict[str, Any] = Field(default_factory=dict)
 
 
 class DigitalTwinPayload(BaseModel):
     date: str | None = None
     digital_twin_state: dict[str, Any] = Field(default_factory=dict)
+    cst_state: dict[str, Any] = Field(default_factory=dict)
     coupling_summary: dict[str, Any] = Field(default_factory=dict)
 
 

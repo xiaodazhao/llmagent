@@ -123,6 +123,20 @@ def _debug_failure(feature: str, started: float, exc: Exception, **fields: Any) 
     _debug_log(f"{feature}.failure", duration_ms=duration_ms, error=str(exc), **fields)
 
 
+def _run_analysis_with_context(
+    analyze_tbm_data: Any,
+    df: pd.DataFrame,
+    context: dict[str, Any],
+) -> dict[str, Any]:
+    """Call analysis with CST context and tolerate legacy one-arg stubs."""
+    try:
+        return analyze_tbm_data(df, context=context)
+    except TypeError as exc:
+        if "context" not in str(exc):
+            raise
+        return analyze_tbm_data(df)
+
+
 def _build_summary_payload(result: dict) -> dict:
     """Build summary payload."""
     stats = result["stats"]
@@ -271,6 +285,7 @@ def _build_geology_payload(result: dict) -> dict:
         "coupling_output_paths": serialize_for_json(result.get("coupling_output_paths", {})),
         "high_attention_segments": serialize_for_json(result.get("high_attention_segments", [])),
         "digital_twin_state": serialize_for_json(result.get("digital_twin_state", {})),
+        "cst_state": serialize_for_json(result.get("cst_state", {})),
     }
 
 
@@ -307,12 +322,22 @@ def register_tbm_routes(
     def _get_daily_analysis(date: Optional[str] = None) -> tuple[Path, dict, list[str], dict, str | None]:
         """Get daily analysis."""
         path = _resolve_daily_path(date)
+        resolved_date = date or _date_from_csv_path(path)
         result, cache_hit = get_or_compute_file_cache(
             DAILY_ANALYSIS_CACHE_NAMESPACE,
             path,
-            lambda: analyze_tbm_data(load_csv(path)),
+            lambda: _run_analysis_with_context(
+                analyze_tbm_data,
+                load_csv(path),
+                {
+                    "date": resolved_date,
+                    "analysis_mode": "daily",
+                    "source_path": str(path),
+                    "source_name": path.name,
+                    "persist_cst": True,
+                },
+            ),
         )
-        resolved_date = date or _date_from_csv_path(path)
         meta = _build_analysis_meta(path, cache_hit, resolved_date)
         return path, result, _collect_warnings(result), meta, resolved_date
 
@@ -608,6 +633,7 @@ def register_tbm_routes(
             payload = {
                 "date": resolved_date,
                 "digital_twin_state": serialize_for_json(result.get("digital_twin_state", {})),
+                "cst_state": serialize_for_json(result.get("cst_state", {})),
                 "coupling_summary": serialize_for_json(result.get("coupling_summary", {})),
             }
             _debug_success(
@@ -673,7 +699,19 @@ def register_tbm_routes(
                     error_code="EMPTY_TIME_WINDOW",
                 )
 
-            result = analyze_tbm_data(df)
+            result = _run_analysis_with_context(
+                analyze_tbm_data,
+                df,
+                {
+                    "date": date,
+                    "analysis_mode": "time_window",
+                    "time_start": start,
+                    "time_end": end,
+                    "source_path": str(_resolve_daily_path(date)),
+                    "source_name": _resolve_daily_path(date).name,
+                    "persist_cst": True,
+                },
+            )
             prompt = build_prompt_timewindow(
                 start_time=start,
                 end_time=end,

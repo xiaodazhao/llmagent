@@ -63,6 +63,7 @@ def _latest_top_segment(coupling_summary):
 
 def build_history_record(date, analysis_result):
     """Build history record."""
+    cst = analysis_result.get("cst_state", {}) if isinstance(analysis_result, dict) else {}
     stats = analysis_result.get("stats", {})
     state_stats = analysis_result.get("state_stats", {})
     gas_stats = analysis_result.get("gas_stats", {})
@@ -83,16 +84,38 @@ def build_history_record(date, analysis_result):
     coupling_state = twin.get("coupling_state", {}) if isinstance(twin, dict) else {}
     top_segment = _latest_top_segment(coupling)
 
+    if isinstance(cst, dict) and cst:
+        cst_spatial = cst.get("spatial_state", {})
+        cst_operation = cst.get("operation_state", {})
+        cst_attention = cst.get("attention_state", {})
+        cst_response = cst.get("response_state", {})
+        cst_geo = cst.get("geological_state", {})
+        current_chainage = cst_spatial.get("face_chainage", position_state.get("current_chainage"))
+        advance_length = cst_spatial.get("advance_length", position_state.get("advance_length"))
+        work_total = _safe_float(cst_operation.get("working_duration_min"), work_total)
+        stop_total = _safe_float(cst_operation.get("stoppage_duration_min"), stop_total)
+        grs_value = _safe_round(cst_attention.get("GRS", 0))
+        rai_value = _safe_round(cst_response.get("RAI", 0))
+        grci_value = _safe_round(cst_attention.get("GRCI", 0))
+        geology_hazards = cst_geo.get("hazards", [])
+    else:
+        current_chainage = position_state.get("current_chainage")
+        advance_length = position_state.get("advance_length")
+        grs_value = _safe_round(top_segment.get("GRS", 0))
+        rai_value = _safe_round(top_segment.get("RAI", 0))
+        grci_value = _safe_round(top_segment.get("GRCI", 0))
+        geology_hazards = []
+
     return _json_safe({
         "date": date,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "position": {
-            "current_chainage": position_state.get("current_chainage"),
+            "current_chainage": current_chainage,
             "current_chainage_dk": position_state.get("current_chainage_dk")
-            or format_chainage_dk(position_state.get("current_chainage")),
+            or format_chainage_dk(current_chainage),
             "start_chainage_dk": position_state.get("start_chainage_dk"),
             "end_chainage_dk": position_state.get("end_chainage_dk"),
-            "advance_length": _safe_round(position_state.get("advance_length"), 2),
+            "advance_length": _safe_round(advance_length, 2),
         },
         "operation": {
             "total_min": _safe_round(total_min, 1),
@@ -130,14 +153,20 @@ def build_history_record(date, analysis_result):
             "has_coupling": bool(coupling.get("has_coupling", False))
             if isinstance(coupling, dict) else False,
             "dominant_level": coupling_state.get("dominant_level"),
-            "max_index": _safe_round(coupling.get("max_index", 0)),
-            "mean_index": _safe_round(coupling.get("mean_index", 0)),
+            "max_index": grci_value,
+            "mean_index": _safe_round(coupling.get("mean_index", grci_value)),
             "level_counts": coupling.get("level_counts", {}) if isinstance(coupling, dict) else {},
             "top_segment": top_segment.get("segment"),
-            "top_segment_index": _safe_round(top_segment.get("risk_response_coupling_index", 0)),
+            "top_segment_index": grci_value,
+            "GRS": grs_value,
+            "RAI": rai_value,
+            "GRCI": grci_value,
         },
         "safety": {
             "gas_exceed_types": _gas_exceed_types(gas_stats),
+        },
+        "geological_attention": {
+            "hazards": geology_hazards,
         },
     })
 

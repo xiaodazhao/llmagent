@@ -1,33 +1,21 @@
-# 最终版方法框架设计
+# 最终版方法框架
 
 ## 1. 文档定位
 
-这份文档描述的是**面向论文最终版本的目标方法框架**，用于统一研究主线、方法表述和后续实验组织。
+这份文档描述的是项目最适合收敛成的正式方法框架。它不是功能清单，而是：
 
-它不是当前代码实现的逐项说明，也不是已完成功能清单，而是对“项目最终应收敛成什么方法”的正式定义。
+- 当前代码主线应该如何被研究化表述
+- `Construction State Twin` 在方法中的中心位置
+- 三个核心指标在 Twin 中的角色
+- LLM、报告、追溯、Agent 如何围绕同一状态层组织
 
-当前代码已经完成了多源数据结构化、地质-施工融合、`GRS / RAI / GRCI`、数字孪生状态摘要、LLM 报告生成和 Agent 问答等主链。本文件在此基础上，进一步提出一个更完整的、可递推更新的 `Construction State Twin` 方法框架。
+## 2. 三个主贡献
 
-## 2. 研究目标
-
-本研究的目标不是构建一个单纯的“LLM 自动写报告系统”，也不是重新发明一个独立的地质风险预测器，而是提出一套：
-
-**面向 TBM 施工报告自动生成的 Construction State Twin-Driven LLM Framework**
-
-它的核心思想是：
-
-1. 将 TBM 原始施工数据和多源地质资料转化为结构化状态信息；
-2. 在统一时间-里程框架下构建一个可递推更新的 `Construction State Twin`；
-3. 由该 Twin 为大语言模型提供 state-aware prompt；
-4. 最终生成可解释、可追溯、可约束的正式施工报告。
-
-## 3. 三个主贡献
-
-为了避免方法框架显得过大、主线分散，最终版论文建议只保留三个核心贡献。
+为了避免主线过大，最终建议只保留三个主贡献。
 
 ### Contribution 1
 
-提出 `Construction State Twin`，用于将 TBM 多源施工数据统一表示为一个可递推更新的状态体。
+提出 `Construction State Twin`，用于将 TBM 多源施工数据统一表示为可递推更新的状态体。
 
 ### Contribution 2
 
@@ -39,31 +27,28 @@
 
 说明：
 
-- `Agent` 不应作为主贡献；
-- `Agent` 在论文中更适合作为 `an interactive extension of CST`；
-- 动态更新应作为 Twin 的形式化目标和扩展能力，而不是第一主实验的核心卖点。
+- `Agent` 不作为主贡献
+- `Agent` 在方法中更适合作为 `an interactive extension of CST`
 
-## 4. 核心主张
+## 3. 核心主张
 
-最终版方法不再把系统理解为：
+最终版方法不再理解为：
 
 `CSV + PDF -> Prompt -> LLM`
 
-而是理解为：
+而是：
 
 `Raw Data -> Structured Evidence -> Construction State Twin -> State-Aware Prompt -> Traceable Report`
 
-也就是说，LLM 不是直接面对原始工程数据，而是面对经过状态组织、空间对齐、证据约束后的中间状态表示。
+也就是说，LLM 不是直接面向原始工程数据，而是面向由状态组织、时空对齐和证据约束后的中间状态表示。
 
-## 5. 方法总框架
-
-最终版方法可以概括为：
+## 4. 方法总框架
 
 \[
 Raw\ Data_t \rightarrow Structured\ Evidence_t \rightarrow CST_t \rightarrow Prompt_t \rightarrow Report_t
 \]
 
-其中，`Construction State Twin` 不是静态快照，而是一个可递推更新的状态体：
+其中：
 
 \[
 CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
@@ -71,282 +56,142 @@ CST_t = \mathcal{U}(CST_{t-1}, PLC_t, Geo_t, Face_t, Gas_t)
 
 这里：
 
-- `CST_{t-1}`：上一时刻或上一分析窗口的 Twin 状态；
-- `PLC_t`：当前时间窗内的 TBM 运行数据；
-- `Geo_t`：当前可用超前地质预报证据；
-- `Face_t`：当前掌子面/洞身素描证据；
-- `Gas_t`：当前安全监测数据；
-- `U`：状态更新算子。
+- `CST_{t-1}`：上一状态
+- `PLC_t`：当前 TBM 运行数据
+- `Geo_t`：当前超前地质证据
+- `Face_t`：当前掌子面证据
+- `Gas_t`：当前安全监测数据
+- `U`：状态更新算子
 
-需要特别说明的是：
+## 5. 当前已实现版本与理想版本
 
-- 该递推公式是最终版方法的形式化目标；
-- 当前系统已经具备历史比较、状态摘要和会话记忆等基础；
-- 但第一轮实验中，动态更新更适合作为 `case study` 和 `state continuity analysis`，而不是最先上量的主对比实验。
+### 当前已实现
 
-## 6. Construction State Twin 的分层定义
+当前代码已经实现：
 
-建议将 `CST_t` 定义为一个由多个子状态组成的分层状态体，而不是单一分数或单一 JSON 摘要。
+- 正式 `CST schema`
+- 主链产出 `cst_state`
+- `SQLite` 持久化
+- 基于 `t-1` 的结构化递推更新
+- `changed_fields / state_confidence / state_stability`
+- `persistent_hazards / persistent_attention_segments`
+- `CST` 驱动的 prompt 生成
+
+### 理想增强版
+
+后续仍可继续增强：
+
+- 更重的动态状态空间模型
+- 更强的状态衰减和平滑
+- 更彻底的 `CST-only` 下游读取链
+- 更强的动态更新实验
+
+## 6. Twin 的分层定义
+
+推荐统一使用以下分层状态体。
 
 ### 6.1 Temporal State
 
-时间状态用于描述当前分析窗口的时间边界和持续关系，包括：
-
-- 当前日期或时间窗；
-- 起始时间与结束时间；
-- 持续时长；
-- 当前窗口在历史序列中的位置。
+- 分析日期 / 时间窗
+- 持续时长
+- 样本数
+- `analysis_mode`
+- `previous_date`
+- `continuity_gap_days`
+- `state_stability`
 
 ### 6.2 Spatial State
 
-空间状态用于描述施工推进在里程轴上的位置，包括：
-
-- 起始里程；
-- 结束里程；
-- 当前掌子面里程；
-- 当前推进长度；
-- 前方关注区间。
+- 起止里程
+- 当前掌子面里程
+- 推进长度
+- 前方关注窗口
+- 前方关注等级
+- 与上一状态的里程变化
 
 ### 6.3 Operation State
 
-运行状态用于描述设备和施工过程本身，包括：
-
-- 基础工况分布；
-- 主导工况；
-- 停机时长与工作时长；
-- 状态切换频率；
-- 施工状态识别结果；
-- 效率摘要。
+- 主导工况
+- 工作时长
+- 停机时长
+- 状态切换次数
+- 效率摘要
+- 上一工况
+- 工况时长变化
 
 ### 6.4 Geological State
 
-地质状态用于描述当前掌子面与前方区段的结构化地质信息，包括：
-
-- 当前掌子面揭示情况；
-- 区段综合围岩等级；
-- 灾害标签；
-- 裂隙、破碎、风化、稳定性等结构化属性；
-- 证据来源数；
-- 证据强度；
-- 不确定性。
+- 当前掌子面条件
+- 区段围岩等级
+- 灾害标签
+- 证据数量
+- 不确定性
+- 持续地质关注
 
 ### 6.5 Response State
 
-响应状态用于描述施工对环境和工况变化的异常响应，包括：
-
-- `RAI`；
-- 停机异常；
-- 效率异常；
-- 参数异常；
-- 关键异常参数方向。
+- `RAI`
+- 异常类型
+- 关键异常参数
+- `RAI_delta`
 
 ### 6.6 Attention State
 
-关注状态用于支撑报告重点排序和前方提示，包括：
+- `GRS`
+- `GRCI`
+- 高关注区段
+- 前方关注
+- 持续关注区段
+- `GRS_delta`
+- `GRCI_delta`
+- `trend_label`
 
-- `GRS`；
-- `GRCI`；
-- 高关注区段列表；
-- 高耦合区段列表；
-- 前方关注区段；
-- 当前建议重点描述对象。
+### 6.7 Provenance State
 
-### 6.7 Provenance and Memory State
+- 证据列表
+- 状态更新来源
+- 上一状态变化摘要
+- lineage
+- changed fields
+- state confidence
 
-追溯与记忆状态用于支持历史对比、问答连续性和证据追溯，包括：
+## 7. 三个指标在 Twin 中的位置
 
-- 关键证据来源列表；
-- 状态更新来源；
-- 与 `CST_{t-1}` 的变化摘要；
-- 历史趋势摘要；
-- Agent 会话上下文。
+### 7.1 GRS
 
-## 7. CST 的标准 JSON Schema
+`GRS` 在论文中建议解释为：
 
-为了让 `CST` 不停留在概念层，建议在实验层和方法层统一采用一个标准化的状态格式。下面给出一个推荐的最小可执行 schema。
+`Geological Attention Score`
 
-```json
-{
-  "case_id": "C01",
-  "date": "2023-12-30",
-  "time_window": {
-    "start_time": "2023-12-30 00:00:00",
-    "end_time": "2023-12-30 23:59:59",
-    "duration_min": 1440
-  },
-  "temporal_state": {
-    "sample_count": 0,
-    "analysis_mode": "daily"
-  },
-  "spatial_state": {
-    "chainage_start": 0.0,
-    "chainage_end": 0.0,
-    "face_chainage": 0.0,
-    "advance_length": 0.0,
-    "forward_window": []
-  },
-  "operation_state": {
-    "main_state": "",
-    "working_duration_min": 0.0,
-    "stoppage_duration_min": 0.0,
-    "state_switch_count": 0,
-    "efficiency_summary": ""
-  },
-  "geological_state": {
-    "face_condition": "",
-    "segment_grade": "",
-    "hazards": [],
-    "evidence_count": 0,
-    "uncertainty": ""
-  },
-  "response_state": {
-    "RAI": 0.0,
-    "anomaly_type": "",
-    "key_parameters": []
-  },
-  "attention_state": {
-    "GRS": 0.0,
-    "GRCI": 0.0,
-    "high_attention_segments": [],
-    "forward_attention": []
-  },
-  "provenance_state": {
-    "evidence_list": [],
-    "state_update_sources": [],
-    "previous_change_summary": ""
-  }
-}
-```
+它不预测地质灾害真值，而是将已有多源地质证据压缩为 Twin 内部的关注状态。
 
-这个 schema 的目的不是约束每个字段都一次到位，而是：
+### 7.2 RAI
 
-- 明确 Twin 必须包含哪些状态层；
-- 为实验脚本和可追溯性实验提供统一输入格式；
-- 为论文中的 `Construction State Twin` 定义提供可执行实例。
+`RAI` 用于表达施工响应异常状态，当前以 `Isolation Forest` 为核心，并对常规环级停顿进行折减。
 
-## 8. 状态更新算子 U 的结构
+### 7.3 GRCI
 
-为了让 `CST_t = U(CST_{t-1}, ...)` 不只是口号，建议将更新算子拆成五个明确步骤。
+`GRCI` 用于表达地质关注和施工响应之间的同步、滞后与变化耦合关系，是 Twin 内部的交叉验证状态。
 
-### Step 1. 多源输入结构化
+## 8. State-Aware Prompt 的正式定义
 
-将原始输入数据转化为统一结构化对象：
-
-- `PLC_t` -> 时间序列施工参数；
-- `Geo_t` -> 区段型超前地质证据；
-- `Face_t` -> 点位型现场揭示证据；
-- `Gas_t` -> 安全监测摘要。
-
-### Step 2. 时间-里程对齐
-
-将不同粒度和不同表达形式的数据统一映射到时间-里程框架中。  
-这是 Twin 成立的基础。
-
-### Step 3. 状态提炼
-
-在统一框架上提炼各子状态，并计算：
-
-- `GRS`：地质关注度；
-- `RAI`：施工响应异常度；
-- `GRCI`：地质-施工耦合验证度。
-
-### Step 4. 与上一状态递推融合
-
-当前状态不仅由当前输入决定，也受到上一状态影响：
-
-- 是否延续上一轮关注区段；
-- 是否沿用上一轮前方提示；
-- 当前异常是否是历史趋势的延续；
-- 重点叙述对象是否发生迁移。
-
-### Step 5. 下游任务解码
-
-从 `CST_t` 派生出不同下游任务结果：
-
-- `Report_t = G(CST_t)`：报告生成；
-- `Forward_t = F(CST_t)`：前方关注提示；
-- `Compare_t = H(CST_t, CST_{t-1})`：历史对比；
-- `Answer_t = Q(CST_t, Query_t, Memory_t)`：Agent 问答；
-- `Trace_t = T(CST_t, Claims_t)`：证据追溯。
-
-## 9. 三个核心指标在最终框架中的位置
-
-在最终版方法框架中，`GRS / RAI / GRCI` 不应作为孤立指标出现，而应作为 `CST_t` 的关键子状态。
-
-### 9.1 GRS
-
-`GRS` 建议在论文中统一解释为 `Geological Attention Score`，用于表征区段级地质关注度，而不是直接预测地质灾害。
-
-在当前代码基础上，建议保留以下定义方向：
-
-- 多源地质证据分量构造；
-- 归一化；
-- 平权聚合；
-- 高斯衰减平滑；
-- 与响应状态的动态修正。
-
-其角色是：  
-**把已有地质证据压缩成 Twin 内部可用的 Attention State。**
-
-### 9.2 RAI
-
-`RAI` 用于表征区段级施工响应异常度。
-
-建议保留当前方向：
-
-- 多参数输入；
-- `Isolation Forest` 作为主异常检测器；
-- 停机与效率异常作为辅助修正；
-- 常规环级停顿候选折减。
-
-其角色是：  
-**把施工时序中的异常响应压缩成 Twin 内部的 Response State。**
-
-### 9.3 GRCI
-
-`GRCI` 用于表征地质关注与施工响应之间的同步性、滞后性和一致性。
-
-建议保留当前逻辑：
-
-- 同步耦合；
-- 滞后耦合；
-- 响应变化；
-- 多参数一致性；
-- 来源支撑修正。
-
-其角色是：  
-**在 Twin 内部完成先验关注与后验响应的交叉验证。**
-
-## 10. State-Aware Prompt 的正式定义
-
-为了避免 `prompt` 被理解成普通 prompt engineering，建议在方法层将其形式化为四部分：
+建议将 Prompt 形式化为：
 
 \[
 Prompt_t = \{Role\ Instruction,\ CST\ Summary,\ Writing\ Constraints,\ Output\ Schema\}
 \]
 
-### 10.1 Role Instruction
+### Role Instruction
 
-指定模型身份，例如：
+指定模型身份和任务边界。
 
-- 你是 TBM 施工技术报告撰写助手；
-- 你需要使用正式工程报告语体；
-- 你必须基于给定状态和证据生成内容。
+### CST Summary
 
-### 10.2 CST Summary
+从 `CST_t` 中抽取与当前报告最相关的状态摘要。
 
-将 `CST_t` 中与当前报告任务最相关的状态摘要组织为 prompt 输入，例如：
+### Writing Constraints
 
-- 时间与里程范围；
-- 工况与效率摘要；
-- 当前掌子面情况；
-- 前方关注状态；
-- `GRS / RAI / GRCI` 重点区段；
-- 气体与历史对比摘要。
-
-### 10.3 Writing Constraints
-
-建议固定包含以下约束：
+至少包含：
 
 1. Only describe the specified date or time window.
 2. Separate current face observations from forward geological predictions.
@@ -354,93 +199,40 @@ Prompt_t = \{Role\ Instruction,\ CST\ Summary,\ Writing\ Constraints,\ Output\ S
 4. Do not claim unsupported hazards.
 5. Every key conclusion should be traceable to the provided CST evidence.
 
-### 10.4 Output Schema
+### Output Schema
 
-约束报告输出结构，例如：
+约束正式报告章节结构。
 
-- 执行摘要；
-- 总体运行情况；
-- 工况统计；
-- 施工状态与效率；
-- 地质情况；
-- 气体安全；
-- 前方提示；
-- 结论与建议。
+## 9. 下游任务的统一解码
 
-这样，`State-aware Prompt` 就不是普通“写得更长的提示词”，而是一个由状态摘要、写作约束和输出结构共同定义的受控生成接口。
+最终版方法建议将不同任务统一看作对 `CST_t` 的不同读取方式：
 
-## 11. 报告生成在最终框架中的位置
+- `Report_t = G(CST_t)`
+- `Forward_t = F(CST_t)`
+- `Compare_t = H(CST_t, CST_{t-1})`
+- `Answer_t = Q(CST_t, Query_t, Memory_t)`
+- `Trace_t = T(CST_t, Claims_t)`
 
-最终版方法应明确：报告不是由原始数据直接生成，而是由 Twin 驱动生成。
+这意味着报告、前方提示、历史对比、Agent 和追溯都建立在同一状态层之上。
 
-\[
-Report_t = \mathcal{G}(CST_t, Prompt_t)
-\]
+## 10. 当前最接近完全体的位置
 
-其中：
+当前项目已经从“分析模块集合”升级成：
 
-- `CST_t` 提供事实基础；
-- `Prompt_t` 提供写作约束；
-- LLM 负责自然语言组织。
+- 正式状态对象
+- 状态递推更新
+- 状态持久化
+- 状态驱动 prompt
+- 状态驱动实验
 
-### 8.1 Prompt 的角色
+如果继续增强，最值得优先投入的是：
 
-Prompt 不是普通用户指令，而是：
+1. 更彻底的 `CST-only` 下游读取
+2. 更强的动态更新实验
+3. 更重的状态空间建模
 
-- 状态感知的；
-- 工程写作受控的；
-- 风险措辞受约束的；
-- 证据来源有边界的。
+## 11. 一句话总结
 
-### 8.2 Report 的角色
+最适合这套项目的最终方法表述是：
 
-最终报告应具备以下性质：
-
-- 覆盖关键状态；
-- 不混淆当前掌子面与前方预测；
-- 不夸大风险；
-- 尽量做到结论可追溯。
-
-## 12. Agent 在最终框架中的位置
-
-Agent 不是最终方法的核心贡献，但可以自然地作为 `CST_t` 的交互式读取接口。
-
-\[
-Answer_t = \mathcal{Q}(CST_t, Query_t, Memory_t)
-\]
-
-因此，Agent 的定位应是：
-
-- 对 Twin 的交互式查询；
-- 对历史状态的连续追问；
-- 对关键证据和重点区段的解释层。
-
-## 13. 与当前实现的关系
-
-### 10.1 已具备基础的部分
-
-当前代码已经具备以下实现基础：
-
-- 多源数据结构化；
-- 统一里程融合；
-- `GRS / RAI / GRCI`；
-- 数字孪生状态摘要；
-- 历史对比；
-- 报告生成；
-- Agent 问答。
-
-### 10.2 尚未完全形式化的部分
-
-仍需要进一步明确和补强的内容包括：
-
-- 将 `digital_twin_state` 正式提升为 `CST_t`；
-- 定义显式的状态更新算子 `U`；
-- 明确 `CST_{t-1}` 到 `CST_t` 的递推机制；
-- 将追溯关系从功能级说明提升为实验级定义；
-- 将多种下游任务统一解释为对同一个 `CST_t` 的不同读取方式。
-
-## 14. 一句话定义
-
-本研究的最终版方法可以概括为：
-
-**通过构建可递推更新的 Construction State Twin，将多源 TBM 施工数据统一映射为一个结构化、可解释、可约束的状态体，并在该状态体基础上利用 state-aware prompt 驱动大语言模型生成可追溯施工报告。**
+**通过统一里程轴将 TBM 多源施工数据组织成可递推更新的 Construction State Twin，并在此基础上构造 State-aware Prompt，驱动大语言模型生成可追溯、受约束的施工报告。**

@@ -34,6 +34,15 @@ class TBMTools:
         """Clear cache."""
         self._analysis_cache.clear()
 
+    def _run_analysis(self, df: pd.DataFrame, context: dict[str, Any]) -> dict[str, Any]:
+        """Run analysis with CST context while tolerating one-arg test doubles."""
+        try:
+            return self.analyze_tbm_data(df, context=context)
+        except TypeError as exc:
+            if "context" not in str(exc):
+                raise
+            return self.analyze_tbm_data(df)
+
     def list_dates(self) -> dict[str, Any]:
         """Handle list dates."""
         dates = []
@@ -74,7 +83,16 @@ class TBMTools:
         try:
             path, df = load_csv_by_date(date) if date else load_latest_csv()
             loaded_date = date or self._date_from_path(path.name)
-            result = self.analyze_tbm_data(df)
+            result = self._run_analysis(
+                df,
+                {
+                    "date": loaded_date,
+                    "analysis_mode": "daily",
+                    "source_path": str(path),
+                    "source_name": path.name,
+                    "persist_cst": True,
+                },
+            )
             return ok(
                 self._summarize_analysis(loaded_date, path, df, result),
                 "Analyzed TBM day data.",
@@ -191,6 +209,7 @@ class TBMTools:
             {
                 "date": analysis["data"]["date"],
                 "digital_twin_state": serialize_for_json(result.get("digital_twin_state", {})),
+                "cst_state": serialize_for_json(result.get("cst_state", {})),
             },
             "Built digital twin state.",
             tool="get_digital_twin_state",
@@ -244,7 +263,16 @@ class TBMTools:
             cache_key = loaded_date or str(path)
             cached = self._analysis_cache.get(cache_key)
             if cached is None:
-                result = self.analyze_tbm_data(df)
+                result = self._run_analysis(
+                    df,
+                    {
+                        "date": loaded_date,
+                        "analysis_mode": "daily",
+                        "source_path": str(path),
+                        "source_name": path.name,
+                        "persist_cst": True,
+                    },
+                )
                 data = self._summarize_analysis(loaded_date, path, df, result)
                 cached = {"result": result, "data": data}
                 self._analysis_cache[cache_key] = cached
@@ -313,5 +341,6 @@ class TBMTools:
                     "level_counts": coupling.get("level_counts", {}),
                 },
                 "digital_twin_state": twin,
+                "cst_state": result.get("cst_state", {}),
             }
         )
