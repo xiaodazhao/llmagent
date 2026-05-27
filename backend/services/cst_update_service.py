@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pandas as pd
 
+from llm.summary_contract import normalize_llm_summary
 from schemas.cst_state import normalize_cst_state
 from services.sqlite_storage_service import load_previous_cst_for_context, save_cst_state
 from utils.serialization import serialize_for_json
@@ -343,7 +344,12 @@ def build_cst_snapshot(
     """Build the current-step CST snapshot from one analysis result."""
     context = context or {}
     twin = deepcopy(analysis_result.get("digital_twin_state") or {})
-    llm_summary = deepcopy(analysis_result.get("llm_summary") or {})
+    llm_summary = normalize_llm_summary(deepcopy(analysis_result.get("llm_summary") or {}))
+    llm_summary["efficiency_summary"] = (
+        (llm_summary.get("cluster_state_summary") or {}).get("efficiency_text")
+        or (llm_summary.get("prompt_text_inputs") or {}).get("cluster_efficiency_text")
+        or llm_summary.get("efficiency_summary")
+    )
     coupling_summary = deepcopy(analysis_result.get("coupling_summary") or {})
     geo_summary = deepcopy(analysis_result.get("geo_summary_segment") or {})
     geo_record_summary = deepcopy(analysis_result.get("geo_summary_record") or {})

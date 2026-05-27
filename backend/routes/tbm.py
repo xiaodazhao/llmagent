@@ -8,6 +8,7 @@ import pandas as pd
 from fastapi import APIRouter, FastAPI
 
 from agent.supervisor_agent import TBMSupervisorAgent
+from llm.summary_contract import normalize_llm_summary
 from llm.llm_api import call_llm
 from llm.prompt_builder import build_prompt
 from llm.prompt_builder_timewindow import build_prompt_timewindow
@@ -160,7 +161,8 @@ def _build_state_payload(result: dict) -> dict:
     """Build state payload."""
     state_segments = result.get("state_segments") or {}
     state_labels = result.get("state_labels") or {}
-    llm_summary = result.get("llm_summary") or {}
+    llm_summary = normalize_llm_summary(result.get("llm_summary") or {})
+    cluster_summary = llm_summary.get("cluster_state_summary", {})
     segments = []
     for state, pairs in state_segments.items():
         try:
@@ -189,10 +191,8 @@ def _build_state_payload(result: dict) -> dict:
         "efficiency": serialize_for_json(efficiency),
         "state_labels": serialize_for_json(_stringify_dict_keys(state_labels)),
         "state_stats": serialize_for_json(_stringify_dict_keys(result.get("state_stats", {}))),
-        "valid_samples": int(_summary_value(llm_summary, LEGACY_VALID_SAMPLE_KEYS, 0) or 0),
-        "state_config": serialize_for_json(
-            _summary_value(llm_summary, LEGACY_STATE_CONFIG_KEYS, {})
-        ),
+        "valid_samples": int(cluster_summary.get("valid_samples", 0) or 0),
+        "state_config": serialize_for_json(cluster_summary.get("config", {})),
     }
 
 
@@ -501,6 +501,11 @@ def register_tbm_routes(
             save_history_record(current_record)
 
             llm_summary = deepcopy(result["llm_summary"])
+            llm_summary["history_comparison"] = history_comparison
+            llm_summary.setdefault("prompt_text_inputs", {})
+            llm_summary["prompt_text_inputs"]["history_comparison_text"] = (
+                history_comparison.get("comparison_text") or "暂无历史对比信息。"
+            )
             llm_summary["施工历史记忆对比"] = history_comparison
 
             prompt = build_prompt(

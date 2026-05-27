@@ -26,6 +26,10 @@ from geology.segment_analysis import (
     run_segment_analysis,
     build_typical_segments_table,
 )
+from llm.summary_contract import (
+    LLM_SUMMARY_SCHEMA_VERSION,
+    build_response_anomaly_summary,
+)
 from services.sqlite_storage_service import save_cst_state
 from services.digital_twin_state import build_digital_twin_state
 from services.cst_update_service import build_or_update_cst
@@ -378,18 +382,144 @@ def _run_gas_analysis(df_geo: pd.DataFrame, df_state: pd.DataFrame) -> dict:
         }
 
 
-def _build_llm_summary(
+def _build_operation_mode_summary(stats: dict) -> dict:
+    """Build the rule-based operation-mode summary."""
+    return {
+        "state_space": "operation_mode",
+        "level": "record_window",
+        "stats": serialize_for_json(stats),
+    }
+
+
+def _build_cluster_state_summary(
     *,
-    stats: dict,
     state_labels: dict,
     state_stats: dict,
     eff_df: pd.DataFrame,
+    n_valid: int,
+    state_cfg: dict,
+) -> dict:
+    """Build the unsupervised cluster-state summary."""
+    efficiency_table = (
+        eff_df.to_dict(orient="records")
+        if isinstance(eff_df, pd.DataFrame) and not eff_df.empty
+        else []
+    )
+    return {
+        "state_space": "cluster_state",
+        "level": "record_window",
+        "labels": serialize_for_json(state_labels),
+        "stats": serialize_for_json(state_stats),
+        "efficiency_table": serialize_for_json(efficiency_table),
+        "valid_samples": int(n_valid),
+        "config": serialize_for_json(state_cfg),
+    }
+
+
+def _build_gas_summary(gas_stats: dict, gas_text: str) -> dict:
+    """Build the gas summary object."""
+    return {
+        "stats": serialize_for_json(gas_stats),
+        "text": gas_text,
+    }
+
+
+def _build_face_description(face_geo_text: str, digital_twin_state: dict) -> dict:
+    """Build the current-face description object."""
+    position_state = digital_twin_state.get("position_state", {}) if isinstance(digital_twin_state, dict) else {}
+    return {
+        "level": "current_face",
+        "text": face_geo_text,
+        "face_chainage": position_state.get("current_chainage"),
+        "face_chainage_dk": position_state.get("current_chainage_dk"),
+    }
+
+
+def _build_excavated_segment_summary(
+    *,
+    geo_summary_segment: dict,
+    geo_text: str,
+    typical_segments_df: pd.DataFrame,
+) -> dict:
+    """Build the excavated-segment summary separate from face and forward views."""
+    typical_segments = (
+        typical_segments_df.to_dict(orient="records")
+        if isinstance(typical_segments_df, pd.DataFrame) and not typical_segments_df.empty
+        else []
+    )
+    return {
+        "level": "excavated_segment",
+        "summary": serialize_for_json(geo_summary_segment),
+        "typical_segments": serialize_for_json(typical_segments),
+        "text": geo_text,
+    }
+
+
+def _build_prompt_text_inputs(
+    *,
+    seg_text: str,
+    stats_text: str,
+    state_text: str,
+    eff_text: str,
+    state_stats_text: str,
+    gas_text: str,
+    geo_text: str,
+    face_geo_text: str,
+    forward_risk_text: str,
+    risk_prob_text: str,
+    coupling_summary: dict,
+    response_anomaly_summary: dict,
+    digital_twin_state: dict,
+) -> dict:
+    """Build prompt-only text fields so structured objects never enter prompts directly."""
+    position_state = digital_twin_state.get("position_state", {}) if isinstance(digital_twin_state, dict) else {}
+    if position_state:
+        digital_twin_text = (
+            f"当前掌子面里程 {position_state.get('current_chainage_dk', '暂无')}，"
+            f"本次推进 {position_state.get('advance_length', 0)} m。"
+        )
+    else:
+        digital_twin_text = "暂无数字孪生文字摘要。"
+
+    return {
+        "operation_segments_text": seg_text,
+        "operation_stats_text": stats_text,
+        "cluster_state_text": state_text,
+        "cluster_efficiency_text": eff_text,
+        "cluster_state_stats_text": state_stats_text,
+        "gas_text": gas_text,
+        "face_description_text": face_geo_text,
+        "excavated_segment_text": geo_text,
+        "forward_risk_text": forward_risk_text,
+        "risk_profile_text": risk_prob_text,
+        "response_anomaly_text": response_anomaly_summary.get("summary_text", "暂无"),
+        "coupling_text": coupling_summary.get("summary_text", "暂无"),
+        "digital_twin_text": digital_twin_text,
+        "history_comparison_text": "暂无历史对比信息。",
+    }
+
+
+def _build_llm_summary(
+    *,
+    seg_text: str,
+    stats: dict,
+    stats_text: str,
+    state_labels: dict,
+    state_text: str,
+    state_stats: dict,
+    state_stats_text: str,
+    eff_df: pd.DataFrame,
+    eff_text: str,
     gas_stats: dict,
+    gas_text: str,
     geo_summary_record: dict,
     geo_summary_segment: dict,
+    geo_text: str,
+    face_geo_text: str,
     typical_segments_df: pd.DataFrame,
     forward_risk_summary: dict,
     forward_risk_text: str,
+    risk_prob_text: str,
     n_valid: int,
     state_cfg: dict,
     coupling_summary: dict,
@@ -399,7 +529,52 @@ def _build_llm_summary(
     cst_state: dict | None = None,
 ) -> dict:
     """Build llm summary."""
+    response_anomaly_summary = build_response_anomaly_summary(
+        coupling_summary=coupling_summary,
+        high_attention_segments=high_attention_segments,
+    )
     summary = {
+        "schema_version": LLM_SUMMARY_SCHEMA_VERSION,
+        "operation_mode_summary": _build_operation_mode_summary(stats),
+        "cluster_state_summary": _build_cluster_state_summary(
+            state_labels=state_labels,
+            state_stats=state_stats,
+            eff_df=eff_df,
+            n_valid=n_valid,
+            state_cfg=state_cfg,
+        ),
+        "gas_summary": _build_gas_summary(gas_stats, gas_text),
+        "geology_summary_record": serialize_for_json(geo_summary_record),
+        "geology_summary_segment": serialize_for_json(geo_summary_segment),
+        "excavated_segment_summary": _build_excavated_segment_summary(
+            geo_summary_segment=geo_summary_segment,
+            geo_text=geo_text,
+            typical_segments_df=typical_segments_df,
+        ),
+        "face_description": _build_face_description(face_geo_text, digital_twin_state),
+        "forward_risk_summary": serialize_for_json(forward_risk_summary),
+        "forward_risk_text": forward_risk_text,
+        "response_anomaly_summary": response_anomaly_summary,
+        "coupling_summary": serialize_for_json(coupling_summary),
+        "coupling_validation": serialize_for_json(coupling_validation),
+        "high_attention_segments": serialize_for_json(high_attention_segments),
+        "digital_twin_state": serialize_for_json(digital_twin_state),
+        "cst_state": serialize_for_json(cst_state or {}),
+        "prompt_text_inputs": _build_prompt_text_inputs(
+            seg_text=seg_text,
+            stats_text=stats_text,
+            state_text=state_text,
+            eff_text=eff_text,
+            state_stats_text=state_stats_text,
+            gas_text=gas_text,
+            geo_text=geo_text,
+            face_geo_text=face_geo_text,
+            forward_risk_text=forward_risk_text,
+            risk_prob_text=risk_prob_text,
+            coupling_summary=coupling_summary,
+            response_anomaly_summary=response_anomaly_summary,
+            digital_twin_state=digital_twin_state,
+        ),
         "基础工况统计": stats,
         "施工状态标签": state_labels,
         "施工状态统计": state_stats,
@@ -467,16 +642,25 @@ def analyze_tbm_data(df: pd.DataFrame, context: dict | None = None):
         persist=False,
     )
     llm_summary = _build_llm_summary(
+        seg_text=operation_result["seg_text"],
         stats=operation_result["stats"],
+        stats_text=operation_result["stats_text"],
         state_labels=state_result["state_labels"],
+        state_text=state_result["state_text"],
         state_stats=state_result["state_stats"],
+        state_stats_text=state_result["state_stats_text"],
         eff_df=state_result["eff_df"],
+        eff_text=state_result["eff_text"],
         gas_stats=gas_result["gas_stats"],
+        gas_text=gas_result["gas_text"],
         geo_summary_record=geology_result["geo_summary_record"],
         geo_summary_segment=geology_result["geo_summary_segment"],
+        geo_text=geology_result["geo_text"],
+        face_geo_text=geology_result["face_geo_text"],
         typical_segments_df=geology_result["typical_segments_df"],
         forward_risk_summary=geology_result["forward_risk_summary"],
         forward_risk_text=geology_result["forward_risk_text"],
+        risk_prob_text=risk_prob_text,
         n_valid=state_result["n_valid"],
         state_cfg=state_result["state_cfg"],
         coupling_summary=geology_result["coupling_summary"],
@@ -494,6 +678,7 @@ def analyze_tbm_data(df: pd.DataFrame, context: dict | None = None):
         "seg_text": operation_result["seg_text"],
         "stats": operation_result["stats"],
         "stats_text": operation_result["stats_text"],
+        "operation_mode_summary": _build_operation_mode_summary(operation_result["stats"]),
         "df_geo": geology_result["df_geo"],
         "df_state": state_result["df_state"],
         "state_labels": state_result["state_labels"],
@@ -503,12 +688,25 @@ def analyze_tbm_data(df: pd.DataFrame, context: dict | None = None):
         "eff_text": state_result["eff_text"],
         "state_stats": state_result["state_stats"],
         "state_stats_text": state_result["state_stats_text"],
+        "cluster_state_summary": _build_cluster_state_summary(
+            state_labels=state_result["state_labels"],
+            state_stats=state_result["state_stats"],
+            eff_df=state_result["eff_df"],
+            n_valid=state_result["n_valid"],
+            state_cfg=state_result["state_cfg"],
+        ),
         "gas_stats": gas_result["gas_stats"],
         "gas_text": gas_result["gas_text"],
         "geo_summary_record": geology_result["geo_summary_record"],
         "geo_summary_segment": geology_result["geo_summary_segment"],
         "geo_summary": geology_result["geo_summary_segment"],
         "geo_text": geology_result["geo_text"],
+        "face_description": _build_face_description(geology_result["face_geo_text"], digital_twin_state),
+        "excavated_segment_summary": _build_excavated_segment_summary(
+            geo_summary_segment=geology_result["geo_summary_segment"],
+            geo_text=geology_result["geo_text"],
+            typical_segments_df=geology_result["typical_segments_df"],
+        ),
         "segment_df": geology_result["segment_df"],
         "typical_segments_df": geology_result["typical_segments_df"],
         "forward_risk_summary": geology_result["forward_risk_summary"],
@@ -517,6 +715,10 @@ def analyze_tbm_data(df: pd.DataFrame, context: dict | None = None):
         "coupling_validation": geology_result["coupling_validation"],
         "coupling_output_paths": geology_result["coupling_output_paths"],
         "high_attention_segments": geology_result["high_attention_segments"],
+        "response_anomaly_summary": build_response_anomaly_summary(
+            coupling_summary=geology_result["coupling_summary"],
+            high_attention_segments=geology_result["high_attention_segments"],
+        ),
         "digital_twin_state": digital_twin_state,
         "cst_state": cst_state,
         "llm_summary": llm_summary,
